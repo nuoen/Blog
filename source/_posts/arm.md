@@ -96,6 +96,9 @@ LDRB R1, [R0, #8]
             X0~X30：通用寄存器；
             SP: 栈指针寄存器；
             PC：程序计数寄存器；
+            其中：x30寄存器（lr寄存器）
+                x30寄存器是链接寄存器，用于保存函数的返回地址，当ret指令执行时，会寻找x30寄存器中的值，作为返回地址；
+                x29寄存器是fp寄存器，用于保存函数的栈帧指针，指向函数的栈帧起始地址，即栈底地址；
 
         3.2 系统寄存器
             系统寄存器提供控制和状态，在AArch64状态下，很多系统寄存器根据不同的异常等级提供不同的变种寄存器：
@@ -152,7 +155,9 @@ LDRB R1, [R0, #8]
         异常处理指令：
         系统寄存器访问指令：
 
-<details><summary>二、ARM 直接编译.s 文件</summary>
+## 二、ARM 直接编译.s 文件
+
+cd /Users/nuoen/Library/Android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/
 直接编译.s 文件，/Users/nuoen/Documents/AndroidSecurity/fridaScript/arm64.s
 android 8.1 :
 ```
@@ -168,6 +173,12 @@ android 13 :
 executable's TLS segment is underaligned: alignment is 8, needs to be at least 64 for ARM64 Bionic
 https://github.com/termux/termux-packages/issues/8273
 
+
+直接编译.cpp 文件 为可执行文件
+./clang++  -target aarch64-linux-android32   ~/Documents/AndroidSecurity/fridaScript/cppLearn/cpptest.cpp  -o ~/Documents/AndroidSecurity/fridaScript/cppLearn/cpptest
+
+编译.cpp 文件为 .s文件
+./clang++  -target aarch64-linux-android32  -S  ~/Documents/AndroidSecurity/fridaScript/cppLearn/cpptest.cpp  -o ~/Documents/AndroidSecurity/fridaScript/cppLearn/cpptest.s
 利用lldb远程调试
 手机端：
 ```
@@ -188,5 +199,9 @@ ldr和str指令
 ARMv8也是基于指令加载和存储的架构，即不能直接操作内存
 ```
 LDR <reg_dst>,<addr> //把存储器地址的数据加载到目的寄存器中
-STR <reg_src>,
+STR <reg_src>,<addr> //把原寄存器的值，存储到内存中
+```
+ld指令寻址1：地址偏移模式
+```
+ldr Xd,[Xn,$offset]
 ```
