@@ -64,3 +64,84 @@ typedef struct Work_{
 Work_ work=new Work_(); 会报错，必须用 struct Work_ work=new Work_();
 --
 
+linux config example:
+
+CONFIG_FTRACE_SYSCALLS 是一个内核配置选项，用于控制是否启用系统调用的函数追踪（ftrace）功能.
+
+linux/syscalls.h
+```
+#ifdef CONFIG_FTRACE_SYSCALLS
+#define SYSCALL_METADATA(sname, nb, ...)			\
+	static const char *types_##sname[] = {			\
+		__MAP(nb,__SC_STR_TDECL,__VA_ARGS__)		\
+	};							\
+	static const char *args_##sname[] = {			\
+		__MAP(nb,__SC_STR_ADECL,__VA_ARGS__)		\
+	};							\
+	SYSCALL_TRACE_ENTER_EVENT(sname);			\
+	SYSCALL_TRACE_EXIT_EVENT(sname);			\
+	static struct syscall_metadata __used			\
+	  __syscall_meta_##sname = {				\
+		.name 		= "sys"#sname,			\
+		.syscall_nr	= -1,	/* Filled in at boot */	\
+		.nb_args 	= nb,				\
+		.types		= nb ? types_##sname : NULL,	\
+		.args		= nb ? args_##sname : NULL,	\
+		.enter_event	= &event_enter_##sname,		\
+		.exit_event	= &event_exit_##sname,		\
+		.enter_fields	= LIST_HEAD_INIT(__syscall_meta_##sname.enter_fields), \
+	};							\
+	static struct syscall_metadata __used			\
+	  __section("__syscalls_metadata")			\
+	 *__p_syscall_meta_##sname = &__syscall_meta_##sname;
+
+static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
+{
+	return tp_event->class == &event_class_syscall_enter ||
+	       tp_event->class == &event_class_syscall_exit;
+}
+#else
+#define SYSCALL_METADATA(sname, nb, ...)
+
+static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
+{
+	return 0;
+}
+#endif
+
+#ifend
+
+```
+if you define CONFIG_FTRACE_SYSCALLS in kconfig file,it will exe "ifdefine" block else it will exe "else" block. 
+
+在C语言的宏定义中，## 操作符被称为“粘合”或“连接”操作符（token-pasting operator）。它的作用是将两个令牌（token）连接成一个新的令牌。这在宏定义和宏展开时非常有用，可以动态生成新的标识符或变量名。
+
+让我们详细解释一下：
+
+使用 ## 的例子
+考虑以下宏定义：
+```#define CONCAT(a, b) a##b```
+如果我们使用这个宏：
+```CONCAT(foo, bar)```
+这将被预处理器展开为：
+```foobar```
+
+在C语言的宏定义中，# 操作符被称为字符串化操作符（stringizing operator）。它的作用是将宏参数转换为字符串字面量。这在宏定义和预处理过程中非常有用，尤其是在需要生成字符串的情况下。
+
+解释 # 操作符
+让我们详细解释一下 # 操作符的使用：
+
+字符串化操作符：
+
+```#define TO_STRING(x) #x```
+这个宏 TO_STRING 将参数 x 转换为字符串字面量。例如：
+
+```TO_STRING(hello)```
+这将被预处理器展开为：
+
+
+```"hello"```
+在 SYSCALL_METADATA 宏中的使用：
+
+```.name = "sys"#sname,``
+这里的 #sname 将 sname 宏参数转换为字符串字面量，并与 "sys" 连接在一起。

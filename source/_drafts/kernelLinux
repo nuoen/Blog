@@ -1,0 +1,35 @@
+https://blog.csdn.net/thisinnocence/article/details/127931774
+安装linux内核
+qemu 脚本
+```
+#!/bin/bash
+
+~/qemu-6.2.0/build/qemu-system-aarch64 \
+    -nographic \
+    -M virt \
+    -cpu cortex-a57 \
+    -smp 2 \
+    -m 4G \
+    -kernel linux-6.7.12/build/arch/arm64/boot/Image \
+    -append "nokaslr root=/dev/ram init=/linuxrc console=ttyAMA0 console=ttyS0" \
+    -initrd initrd.ext4 \
+    -fsdev local,id=fsdev0,path=/home/nuoen/linux-6.7.12/LinuxLearn,security_model=passthrough \
+    -device virtio-9p-pci,id=fs0,fsdev=fsdev0,mount_tag=host0 \
+    -monitor unix:/tmp/qemu-monitor-socket,server,nowait \
+    -incoming "exec:cat ./savefile.img"
+```
+共享空间
+```
+/mnt # mkdir host
+/mnt # mount -t 9p -o trans=virtio,version=9p2000.L host0 /mnt/host
+```
+
+
+进入qemu
+```socat UNIX-CONNECT:/tmp/qemu-monitor-socket -```
+
+保存镜像
+```(qemu) migrate "exec:cat > ./savefile.img"```
+注意：保存镜像时，要先取消共享空间的挂载
+```umont /mnt/host```
+
