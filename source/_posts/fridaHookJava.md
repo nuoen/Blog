@@ -50,3 +50,15 @@ function printJavaStack(tag) {
     });
 }
 ```
+```
+Java.choose("com.mitv.videoplayer.fragment.InnerVideoFragment" , {
+    onMatch : function(instance){ //This function will be called for every instance found by frida
+    console.log("Found instance: "+instance);
+    console.log("mOnInfoListener : " + instance.mOnInfoListener.value);
+    var runnable=DisabelSecureRunable.$new(instance);
+    instance.runOnUiThread(runnable);
+    console.log("stack: "+Java.use("java.lang.Exception").$new("Exception").getStackTrace());            },
+    onComplete:function(){}
+});
+```
+java.choose ,只有具体的类名才会生效， 比如InnerVideoFragment 继承 VideoFragment ,找VideoFragment会找不到。
