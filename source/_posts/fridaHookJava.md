@@ -21,6 +21,13 @@ frida -U com.kevin.android -l hook.js
 ``` bash
 frida -UF -l hook.js
 ```
+如果需要远程连接
+```
+remote device:./fs_1413_a64 -l 0.0.0.0:27042
+```
+```
+local device:frida-PS -H 10.200.47.99:27042
+```
 
 ```python
 import sys

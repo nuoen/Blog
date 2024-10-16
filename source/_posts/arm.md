@@ -158,6 +158,9 @@ LDRB R1, [R0, #8]
 ## 二、ARM 直接编译.s 文件
 
 cd /Users/nuoen/Library/Android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/
+目录更新：
+/Users/nuoen/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin
+
 直接编译.s 文件，/Users/nuoen/Documents/AndroidSecurity/fridaScript/arm64.s
 android 8.1 :
 ```
@@ -205,3 +208,6 @@ ld指令寻址1：地址偏移模式
 ```
 ldr Xd,[Xn,$offset]
 ```
+
+
+std:string内存结构
