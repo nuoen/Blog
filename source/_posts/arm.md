@@ -17,7 +17,7 @@ libnativelib.so:0000007E929D3CCC B.NE            loc_7E929D3CE0
 
 //https://cataloc.gitee.io/blog/2021/04/24/Android%E9%80%86%E5%90%91%E4%B8%AD%E7%9A%84Canary%E6%9C%BA%E5%88%B6/
 
-
+### LDR
 `LDR` 和 `LDUR` 都是ARM汇编中用于加载（Load）数据的指令，但它们有一些重要的区别：
 
 1. LDR（Load Register）：
@@ -62,6 +62,8 @@ LDRB R1, [R0, #8]
 ```
 
 这条指令将加载地址为 `R0 + 8` 处的一个字节，将其零扩展为32位，然后将其存储在 `R1` 寄存器中。`LDRB` 通常用于加载单个字节的数据，例如字符或字节型的数据。
+
+### MRS
 
 
 # ARM64 学习：
