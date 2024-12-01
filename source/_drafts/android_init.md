@@ -416,6 +416,12 @@ int SecondStageMain(int argc, char** argv) {
     }
 	InstallSignalFdHandler(&epoll);
 
+	
+	ActionManager& am = ActionManager::GetInstance();
+    ServiceList& sm = ServiceList::GetInstance();
+	//加载启动脚本
+    LoadBootScripts(am, sm);
+
 	while (true) {}
 }
 ```
@@ -429,6 +435,37 @@ init进程是Linux系统中用户空间的第一个进程，进程号固定为1�
 
 
 ### 解析启动脚本
+
+```c
+static void LoadBootScripts(ActionManager& action_manager, ServiceList& service_list) {
+    Parser parser = CreateParser(action_manager, service_list);
+
+    std::string bootscript = GetProperty("ro.boot.init_rc", "");
+    if (bootscript.empty()) {
+        parser.ParseConfig("/init.rc");
+        if (!parser.ParseConfig("/system/etc/init")) {
+            late_import_paths.emplace_back("/system/etc/init");
+        }
+        if (!parser.ParseConfig("/product/etc/init")) {
+            late_import_paths.emplace_back("/product/etc/init");
+        }
+        if (!parser.ParseConfig("/product_services/etc/init")) {
+            late_import_paths.emplace_back("/product_services/etc/init");
+        }
+        if (!parser.ParseConfig("/odm/etc/init")) {
+            late_import_paths.emplace_back("/odm/etc/init");
+        }
+        if (!parser.ParseConfig("/vendor/etc/init")) {
+            late_import_paths.emplace_back("/vendor/etc/init");
+        }
+    } else {
+        parser.ParseConfig(bootscript);
+    }
+}
+```
+
+
+
 
 ### 启动解析的服务
 
