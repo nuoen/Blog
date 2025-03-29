@@ -1,0 +1,305 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>ARM64 | Nuoen's Blog</title><meta name="author" content="nuoen"><meta name="copyright" content="nuoen"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="CPSR实现金丝雀机制，防止栈溢出libnativelib.so:0000007E929D3B90 MRS             X8, #3, c13, c0, #2libnativelib.so:0000007E929D3B94 LDR             X8, [X8,#0x28]li"><link rel="shortcut icon" href="/Blog/img/favicon.png"><link rel="canonical" href="https://nuoen.github.io/Blog/2023/12/28/arm/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/Blog/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css" media="print" onload="this.media='all'"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui/dist/fancybox/fancybox.min.css" media="print" onload="this.media='all'"><script>const GLOBAL_CONFIG = {
+  root: '/Blog/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  noticeOutdate: undefined,
+  highlight: {"plugin":"highlighjs","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false},
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'fancybox',
+  Snackbar: undefined,
+  source: {
+    justifiedGallery: {
+      js: 'https://cdn.jsdelivr.net/npm/flickr-justified-gallery/dist/fjGallery.min.js',
+      css: 'https://cdn.jsdelivr.net/npm/flickr-justified-gallery/dist/fjGallery.min.css'
+    }
+  },
+  isPhotoFigcaption: false,
+  islazyload: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'ARM64',
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: false,
+  isToc: true,
+  postUpdate: '2024-11-01 01:03:17'
+}</script><noscript><style type="text/css">
+  #nav {
+    opacity: 1
+  }
+  .justified-gallery img {
+    opacity: 1
+  }
+
+  #recent-posts time,
+  #post-meta time {
+    display: inline !important
+  }
+</style></noscript><script>(win=>{
+    win.saveToLocal = {
+      set: function setWithExpiry(key, value, ttl) {
+        if (ttl === 0) return
+        const now = new Date()
+        const expiryDay = ttl * 86400000
+        const item = {
+          value: value,
+          expiry: now.getTime() + expiryDay,
+        }
+        localStorage.setItem(key, JSON.stringify(item))
+      },
+
+      get: function getWithExpiry(key) {
+        const itemStr = localStorage.getItem(key)
+
+        if (!itemStr) {
+          return undefined
+        }
+        const item = JSON.parse(itemStr)
+        const now = new Date()
+
+        if (now.getTime() > item.expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return item.value
+      }
+    }
+  
+    win.getScript = url => new Promise((resolve, reject) => {
+      const script = document.createElement('script')
+      script.src = url
+      script.async = true
+      script.onerror = reject
+      script.onload = script.onreadystatechange = function() {
+        const loadState = this.readyState
+        if (loadState && loadState !== 'loaded' && loadState !== 'complete') return
+        script.onload = script.onreadystatechange = null
+        resolve()
+      }
+      document.head.appendChild(script)
+    })
+  
+    win.getCSS = (url,id = false) => new Promise((resolve, reject) => {
+      const link = document.createElement('link')
+      link.rel = 'stylesheet'
+      link.href = url
+      if (id) link.id = id
+      link.onerror = reject
+      link.onload = link.onreadystatechange = function() {
+        const loadState = this.readyState
+        if (loadState && loadState !== 'loaded' && loadState !== 'complete') return
+        link.onload = link.onreadystatechange = null
+        resolve()
+      }
+      document.head.appendChild(link)
+    })
+  
+      win.activateDarkMode = function () {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      win.activateLightMode = function () {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+      const t = saveToLocal.get('theme')
+    
+          if (t === 'dark') activateDarkMode()
+          else if (t === 'light') activateLightMode()
+        
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        if (asideStatus === 'hide') {
+          document.documentElement.classList.add('hide-aside')
+        } else {
+          document.documentElement.classList.remove('hide-aside')
+        }
+      }
+    
+    const detectApple = () => {
+      if(/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)){
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+    })(window)</script><meta name="generator" content="Hexo 5.4.2"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img is-center"><img src="https://i.loli.net/2021/02/24/5O1day2nriDzjSu.png" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="sidebar-site-data site-data is-center"><a href="/Blog/archives/"><div class="headline">文章</div><div class="length-num">4</div></a><a href="/Blog/tags/"><div class="headline">标签</div><div class="length-num">0</div></a><a href="/Blog/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><hr class="custom-hr"/></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header"><nav id="nav"><span id="blog-info"><a href="/Blog/" title="Nuoen's Blog"><span class="site-name">Nuoen's Blog</span></a></span><div id="menus"><div id="toggle-menu"><a class="site-page" href="javascript:void(0);"><i class="fas fa-bars fa-fw"></i></a></div></div></nav><div id="post-info"><h1 class="post-title">ARM64</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2023-12-28T12:55:47.614Z" title="发表于 2023-12-28 20:55:47">2023-12-28</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2024-10-31T17:03:17.404Z" title="更新于 2024-11-01 01:03:17">2024-11-01</time></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title="ARM64"><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">阅读量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="post-content" id="article-container"><h3 id="CPSR"><a href="#CPSR" class="headerlink" title="CPSR"></a>CPSR</h3><p>实现金丝雀机制，防止栈溢出<br>libnativelib.so:0000007E929D3B90 MRS             X8, #3, c13, c0, #2<br>libnativelib.so:0000007E929D3B94 LDR             X8, [X8,#0x28]<br>libnativelib.so:0000007E929D3B98 STUR            X8, [X29,#var_8]</p>
+<p>libnativelib.so:0000007E929D3CBC MRS             X8, #3, c13, c0, #2<br>libnativelib.so:0000007E929D3CC0 LDR             X8, [X8,#0x28]<br>libnativelib.so:0000007E929D3CC4 LDUR            X9, [X29,#var_8]<br>libnativelib.so:0000007E929D3CC8 SUBS            X8, X8, X9<br>libnativelib.so:0000007E929D3CCC B.NE            loc_7E929D3CE0</p>
+<p>//<a target="_blank" rel="noopener" href="https://cataloc.gitee.io/blog/2021/04/24/Android%E9%80%86%E5%90%91%E4%B8%AD%E7%9A%84Canary%E6%9C%BA%E5%88%B6/">https://cataloc.gitee.io/blog/2021/04/24/Android%E9%80%86%E5%90%91%E4%B8%AD%E7%9A%84Canary%E6%9C%BA%E5%88%B6/</a></p>
+<h3 id="LDR"><a href="#LDR" class="headerlink" title="LDR"></a>LDR</h3><p><code>LDR</code> 和 <code>LDUR</code> 都是ARM汇编中用于加载（Load）数据的指令，但它们有一些重要的区别：</p>
+<ol>
+<li><p>LDR（Load Register）：</p>
+<ul>
+<li><code>LDR</code> 指令用于从内存中加载数据，并将其存储到通用寄存器中。</li>
+<li><code>LDR</code> 指令可以加载各种数据类型，包括字节、半字、字、双字以及浮点数等。</li>
+<li><code>LDR</code> 指令执行标准的内存访问，根据所加载数据的大小，可能会引发数据对齐异常（例如，尝试加载未对齐的数据）。</li>
+<li><code>LDR</code> 指令通常用于访问常规内存，如堆、栈或全局数据。</li>
+</ul>
+</li>
+<li><p>LDUR（Load Register Unprivileged）：</p>
+<ul>
+<li><code>LDUR</code> 指令是ARM64架构引入的一种指令，用于无权限加载数据，它通常在用户模式下使用。</li>
+<li><code>LDUR</code> 指令具有无权限访问内存的特性，因此即使在特权级别较低（如用户模式）也可以使用。</li>
+<li><code>LDUR</code> 指令在加载数据时会自动处理数据对齐，不会引发数据对齐异常，这是 <code>LDUR</code> 与 <code>LDR</code> 的一个重要区别。</li>
+<li><code>LDUR</code> 指令也可以加载各种数据类型，但它在无权限访问的情况下更有用。</li>
+</ul>
+</li>
+</ol>
+<p>总结来说，主要区别在于权限和数据对齐处理：</p>
+<ul>
+<li><code>LDR</code> 是标准的加载指令，用于加载数据到通用寄存器，通常在特权级别较高的情况下使用。</li>
+<li><code>LDUR</code> 是一种无权限加载指令，它可以在用户模式下使用，且具有自动数据对齐的功能，因此更适合无权限访问的情况。</li>
+</ul>
+<p>选择使用哪个指令取决于特定的应用场景和访问内存的权限要求。</p>
+<p><code>LDRB</code> 是ARM汇编中的指令，用于从内存中加载一个字节（8位数据）并将其存储到通用寄存器中。<code>LDRB</code> 的名称表示 “Load Byte”，它执行以下操作：</p>
+<ol>
+<li>从指定的内存地址读取一个字节的数据。</li>
+<li>将读取的字节数据零扩展到32位，然后将其存储在目标通用寄存器中。</li>
+</ol>
+<p><code>LDRB</code> 指令的通用格式如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">LDRB Rd, [Rn, #offset]</span><br></pre></td></tr></table></figure>
+
+<p>其中：</p>
+<ul>
+<li><code>Rd</code> 是目标通用寄存器，用于存储加载的字节数据。</li>
+<li><code>Rn</code> 是基址寄存器，包含了内存地址的基址。</li>
+<li><code>offset</code> 是一个偏移量，指定要加载的内存地址相对于基址寄存器 <code>Rn</code> 的偏移。</li>
+</ul>
+<p>举个例子，如果要从内存地址 <code>R0 + 8</code> 处加载一个字节，然后将其存储到通用寄存器 <code>R1</code> 中，可以使用以下指令：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">LDRB R1, [R0, #8]</span><br></pre></td></tr></table></figure>
+
+<p>这条指令将加载地址为 <code>R0 + 8</code> 处的一个字节，将其零扩展为32位，然后将其存储在 <code>R1</code> 寄存器中。<code>LDRB</code> 通常用于加载单个字节的数据，例如字符或字节型的数据。</p>
+<h3 id="MRS"><a href="#MRS" class="headerlink" title="MRS"></a>MRS</h3><h1 id="ARM64-学习："><a href="#ARM64-学习：" class="headerlink" title="ARM64 学习："></a>ARM64 学习：</h1><h2 id="一、基础知识"><a href="#一、基础知识" class="headerlink" title="一、基础知识"></a>一、基础知识</h2><h3 id="1-ARMv8特色："><a href="#1-ARMv8特色：" class="headerlink" title="1.ARMv8特色："></a>1.ARMv8特色：</h3><pre><code>* (1) 超大的物理地址空间(Large Physical Address)，提供超过4GB物理内存的访问；
+    (2) 64位宽的虚拟地址空间(64-bit Virtual Addresing);
+    (3) 提供31个64位宽的通用寄存器，可以减少对栈的访问，从而提高性能；
+    (4) 提供16KB和64KB的页面，有助于降低TLB的未命中率(miss rate);
+    (5) 全新的异常处理模型，有助于降低操作系统和虚拟化的实现复杂度；
+    (6)全新的加载-获取，存储-释放指令(Load-Acquire, Store-Release Instructions)。专门为C++11，C11以及Java内存模型设计；
+
+2 执行状态
+    AArch64: 64位的执行状态：
+    (1) 提供31个64位通用寄存器；
+    (2) 提供64位的程序计数器寄存器PC、栈指针寄存器SP以及异常链接寄存器；
+    (3) 提供A64指令集；
+    (4)定义ARMv8异常模型，支持4个异常等级，EL0~EL3;
+    (5)提供64位的内存模型；
+    (6)定义一组处理器状态(PSTATE)用来保存PE的状态；
+    AArch32: 32位的执行状态：
+    (1) 提供13个632位通用寄存器, 32位的程序计数寄存器PC、栈指针寄存器SP、链接寄存器；
+    (2) 提供A32,T32指令集；
+    (3)定义ARMv7异常模型，基于PE模式并映射到ARMv8的异常模型中；
+    (4)提供32位虚拟内存访问机制；
+    (5)定义一组处理器状态(PSTATE)用来保存PE的状态；
+
+3 ARMv8包含的寄存器
+    3.1 ARMv8包含31个通用寄存器
+        AArch64运行状态支持31个通用寄存器X0~X30，AArch32状态支持16个32位通用寄存器；
+        X0~X30：通用寄存器；
+        SP: 栈指针寄存器；
+        PC：程序计数寄存器；
+        其中：x30寄存器（lr寄存器）
+            x30寄存器是链接寄存器，用于保存函数的返回地址，当ret指令执行时，会寻找x30寄存器中的值，作为返回地址；
+            x29寄存器是fp寄存器，用于保存函数的栈帧指针，指向函数的栈帧起始地址，即栈底地址；
+
+    3.2 系统寄存器
+        系统寄存器提供控制和状态，在AArch64状态下，很多系统寄存器根据不同的异常等级提供不同的变种寄存器：
+        &lt;reg_name&gt;_ELx, x is 0,1,2, or 3
+        比如SP_EL0表示在EL0下的栈指针寄存器；
+
+    3.3 SIMD/FP寄存器：
+        支持128bit寄存器
+
+    3.4 特殊寄存器
+        XZE
+
+4.数据类型
+    Byte: 8bit
+    Halfword: 16bit
+    Word: 32bit
+    Doubleworld: 64bit
+    Quadword: 128bit
+
+5.异常模型
+    Exception Levels确定了处理器当前运行的特权级别，类似ARMv7架构中的特权等级
+    EL0: 用户特权，用于运行普通应用程序；
+    EL1: 系统特权，通常用于运行操作系统；
+    EL2: 运行虚拟化扩展的虚拟监控程序(Hypervisor);
+    EL3: 运行安全世界中的安全监控器(Secure Monitor);
+    异常级别    应用场景    安全世界
+    EL0    APP    Secure OS
+    EL1    Guest OS    sECURE OS
+    EL2    Hypervisor    Secure Hypervisor
+    EL3    Secure—&gt;    –&gt;monitor
+
+6.A64汇编指令介绍：
+    1.A64指令集只能运行在aarch64环境中；
+    2.所有的A64汇编指令都是32bit宽；
+    3.A64支持全部大写或小写书写方式；
+    4.寄存器命名,
+    Name    size    Encoding    Descriptio
+    Wn    32bits    0~30    General-purpose register0~30
+    Xn    64bit    0~30    General-purpose register0~30
+    WZR    32bits    31    Zero register
+    XZR    64bit    31    Zero register
+    WSP    32bits    31    Current stack pointer
+    SP    64bit    31    Current stack pointer
+
+7.A64指令分类
+    内存加载和存储指令：
+    多字节内存加载和存储：
+    算术和移位指令：
+    位操作指令：
+    条件操作：
+    跳转指令：
+    独占访存指令：
+    内存屏障指令：
+    异常处理指令：
+    系统寄存器访问指令：
+</code></pre>
+<h2 id="二、ARM-直接编译-s-文件"><a href="#二、ARM-直接编译-s-文件" class="headerlink" title="二、ARM 直接编译.s 文件"></a>二、ARM 直接编译.s 文件</h2><p>cd /Users/nuoen/Library/Android/sdk/ndk/25.2.9519653/toolchains/llvm/prebuilt/<br>目录更新：<br>/Users/nuoen/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin</p>
+<p>直接编译.s 文件，/Users/nuoen/Documents/AndroidSecurity/fridaScript/arm64.s<br>android 8.1 :</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">./clang -target aarch64-linux-android26 -v  ~/Documents/AndroidSecurity/fridaScript/arm64.s -o ~/Documents/AndroidSecurity/fridaScript/arm64android --static -ffunction-sections -fdata-sections -Wl,--gc-sections </span><br></pre></td></tr></table></figure>
+<p>android 13 :</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">./clang -target aarch64-linux-android31 -v  ~/Documents/AndroidSecurity/fridaScript/arm64.s -o ~/Documents/AndroidSecurity/fridaScript/arm64android --static</span><br></pre></td></tr></table></figure>
+<p>其中：<br>–static 主要解决 : ld: error: relocation R_AARCH64_ABS64 cannot be used against local symbol; recompile with -fPIC<br>-ffunction-sections -fdata-sections -Wl,–gc-sections 主要解决:<br>executable’s TLS segment is underaligned: alignment is 8, needs to be at least 64 for ARM64 Bionic<br><a target="_blank" rel="noopener" href="https://github.com/termux/termux-packages/issues/8273">https://github.com/termux/termux-packages/issues/8273</a></p>
+<p>直接编译.cpp 文件 为可执行文件<br>./clang++  -target aarch64-linux-android32   ~/Documents/AndroidSecurity/fridaScript/cppLearn/cpptest.cpp  -o ~/Documents/AndroidSecurity/fridaScript/cppLearn/cpptest</p>
+<p>编译.cpp 文件为 .s文件<br>./clang++  -target aarch64-linux-android32  -S  ~/Documents/AndroidSecurity/fridaScript/cppLearn/cpptest.cpp  -o ~/Documents/AndroidSecurity/fridaScript/cppLearn/cpptest.s<br>利用lldb远程调试<br>手机端：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">./lldb-server p --server --listen unix-abstract:///data/local/tmp/debug.sock</span><br></pre></td></tr></table></figure>
+<p>调试端：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">$ lldb-&lt;version&gt;</span><br><span class="line">$ platform list  # 查看lldb可以连接的平台</span><br><span class="line">$ platform select remote-android</span><br><span class="line">$ platform status # 查看平台状态</span><br><span class="line">$ platform connect unix-abstract-connect:///data/local/tmp/debug.sock</span><br></pre></td></tr></table></figure>
+</details>
+
+<p>A64的存储和加载指令<br>ldr和str指令<br>ARMv8也是基于指令加载和存储的架构，即不能直接操作内存</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">LDR &lt;reg_dst&gt;,&lt;addr&gt; //把存储器地址的数据加载到目的寄存器中</span><br><span class="line">STR &lt;reg_src&gt;,&lt;addr&gt; //把原寄存器的值，存储到内存中</span><br></pre></td></tr></table></figure>
+<p>ld指令寻址1：地址偏移模式</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ldr Xd,[Xn,$offset]</span><br></pre></td></tr></table></figure>
+
+
+<p>std:string内存结构</p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">文章作者: </span><span class="post-copyright-info"><a href="https://nuoen.github.io/Blog">nuoen</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">文章链接: </span><span class="post-copyright-info"><a href="https://nuoen.github.io/Blog/2023/12/28/arm/">https://nuoen.github.io/Blog/2023/12/28/arm/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="https://nuoen.github.io/Blog" target="_blank">Nuoen's Blog</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"></div><div class="post_share"><div class="social-share" data-image="https://i.loli.net/2021/02/24/5O1day2nriDzjSu.png" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><div class="prev-post pull-left"><a href="/Blog/2023/12/28/hello-world/" title="Hello World"><div class="cover" style="background: var(--default-bg-color)"></div><div class="pagination-info"><div class="label">上一篇</div><div class="prev_info">Hello World</div></div></a></div><div class="next-post pull-right"><a href="/Blog/2023/05/05/fridaHookJava/" title="frida hook java"><div class="cover" style="background: var(--default-bg-color)"></div><div class="pagination-info"><div class="label">下一篇</div><div class="next_info">frida hook java</div></div></a></div></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info"><div class="is-center"><div class="avatar-img"><img src="https://i.loli.net/2021/02/24/5O1day2nriDzjSu.png" onerror="this.onerror=null;this.src='/Blog/img/friend_404.gif'" alt="avatar"/></div><div class="author-info__name">nuoen</div><div class="author-info__description"></div></div><div class="card-info-data site-data is-center"><a href="/Blog/archives/"><div class="headline">文章</div><div class="length-num">4</div></a><a href="/Blog/tags/"><div class="headline">标签</div><div class="length-num">0</div></a><a href="/Blog/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/xxxxxx"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">This is my Blog</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-3"><a class="toc-link" href="#CPSR"><span class="toc-number">1.</span> <span class="toc-text">CPSR</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#LDR"><span class="toc-number">2.</span> <span class="toc-text">LDR</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#MRS"><span class="toc-number">3.</span> <span class="toc-text">MRS</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#ARM64-%E5%AD%A6%E4%B9%A0%EF%BC%9A"><span class="toc-number"></span> <span class="toc-text">ARM64 学习：</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E3%80%81%E5%9F%BA%E7%A1%80%E7%9F%A5%E8%AF%86"><span class="toc-number"></span> <span class="toc-text">一、基础知识</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-ARMv8%E7%89%B9%E8%89%B2%EF%BC%9A"><span class="toc-number">1.</span> <span class="toc-text">1.ARMv8特色：</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%8C%E3%80%81ARM-%E7%9B%B4%E6%8E%A5%E7%BC%96%E8%AF%91-s-%E6%96%87%E4%BB%B6"><span class="toc-number"></span> <span class="toc-text">二、ARM 直接编译.s 文件</span></a></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/Blog/2023/12/28/hello-world/" title="Hello World">Hello World</a><time datetime="2023-12-28T12:55:47.615Z" title="发表于 2023-12-28 20:55:47">2023-12-28</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/Blog/2023/12/28/arm/" title="ARM64">ARM64</a><time datetime="2023-12-28T12:55:47.614Z" title="发表于 2023-12-28 20:55:47">2023-12-28</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/Blog/2023/05/05/fridaHookJava/" title="frida hook java">frida hook java</a><time datetime="2023-05-05T06:15:28.000Z" title="发表于 2023-05-05 14:15:28">2023-05-05</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/Blog/2023/01/25/allSafe/" title="allSafe">allSafe</a><time datetime="2023-01-25T08:55:12.000Z" title="发表于 2023-01-25 16:55:12">2023-01-25</time></div></div></div></div></div></div></main><footer id="footer"><div id="footer-wrap"><div class="copyright">&copy;2020 - 2025 By nuoen</div><div class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly</a></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="浅色和深色模式转换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside_config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/Blog/js/utils.js"></script><script src="/Blog/js/main.js"></script><script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui/dist/fancybox/fancybox.umd.min.js"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
