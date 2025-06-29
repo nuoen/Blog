@@ -1,7 +1,7 @@
 # Android 启动流程 
 
 idle 进程 优先级
-生成  0 进程init 
+生成  1 进程init 
 生成 2 进程 system_server
 
 

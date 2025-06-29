@@ -202,3 +202,10 @@ private:
 | - instance 的内存空间 (已初始化) |
 +------------------+
 ```
+
+explicit关键字
+https://www.cnblogs.com/rednodel/p/9299251.html
+
+显示声明构造函数，防止隐式转换
+
+
