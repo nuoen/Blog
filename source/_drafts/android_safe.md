@@ -64,7 +64,9 @@ Identifier才是系统层面的标识
 * 某些场景下，允许多个不同的Target/用户 (而不是一个)具有一致的操作权限，怎么办？ID---->GID---->多个用户可以属于一个GID，一个用户可以属于多个GIDs
 * 所以文件权限的管理力度区分为3类群体：属于特定UID的用户，属于特定GID的用户（们），其他用户
 * 一个上帝用户存在：ROOT，其UID=0，上帝用户永远满足属于任何UID
-
+```
+ps -eo pid,uid,gid,user,args
+```
 ## 文件的可操作权限
 文件/文件夹的可读
 文件/文件夹的可写
@@ -414,6 +416,144 @@ for(int i=0;prctl(PR_CAPBEST_READ,i,0,0,0,0)>=0;i++){
 ## 回顾和总结
 
 # Android中的签名
+## Android的签名作用：完整性鉴别
+* 支持自签名用于完整行鉴别
+* 不做信任模式
+* 不做安装和运行时的限制,即不限制证书是否是可信的
+## Android的签名作用：Signature Permissions 和 ShareUID
+* Signature Protected Level Permissions
+  用于特权Permission
+  只有特定签名的APK才被授权
+```xml
+      <!-- @SystemApi Allows access to hardware peripherals.  Intended only for hardware testing.
+         <p>Not for use by third-party applications.
+         @hide
+    -->
+    <permission android:name="android.permission.HARDWARE_TEST"
+        android:protectionLevel="signature" />
+ ```
+* Share Process UID android:sharedUserId="xxxx"
+  Process间Share UID的目的是共享资源等
+  Android中两个APK Share相同的UID必须其签名所用的Private Key一样（为什么）
+  如果shareUID相同，A可以访问B中的data/data下的资源
+## Android的签名作用：身份ID和升级的匹配
+* Android中的自签名只是代表了身份，但不代表身份是否可信任
+* Android的应用的Identifier是Package Name:
+  Package Name 不一样，互相不影响，允许同时存在（安装）
+  Package Name 一样，只能存在一个，允许做升级处理
+* 升级的安全性考虑
+  必须签名的证书一致（防假冒，防侵入隐私）
+  如果不一致，则用户要么放弃新的应用，要么先卸载旧的，再安装新的。但这属于安装，不属于升级
+  正常的升级不擦除应用的工作目录数据，以保证历史数据的持续性
+## AndroidAPK之META INF
+* APK结构
+* META INF的组成
+*   •	Android 7.0 (Nougat) 开始支持 v2 签名（APK Signature Scheme v2），之后又有 v3/v4。
+	•	使用 v2/v3/v4 签名时，可以不再包含 CERT.RSA、CERT.SF、MANIFEST.MF 文件，因为签名数据存储在 APK 尾部的 Signing Block 里。
+* 签名流程
+  PrivateKey(hash(CERT.SF)) => CERT.RSA
+## 回顾和总结
 
+# Android中的权限
+## Android的权限作用：细粒度特权管理
+* 权限与操作关联
+  android不支持隐式申请权限，即使是系统应用，也需要显式申请权限
+* 应用需要显式申请权限
+* 用户对权限可知（不可控），
+  现在可控（厂商处理）
+* 对特权权限单独控制
+## Android的不同权限类别
+在 Android 中，**权限（Permission）**按作用范围和敏感程度可以分为几个主要类别。下面给为一个体系化梳理：
+⸻
+1. 普通权限 (Normal Permissions)
+	•	特点：涉及用户隐私风险较小，系统会在安装时自动授予。
+	•	示例：
+	•	INTERNET：访问网络
+	•	ACCESS_NETWORK_STATE：获取网络状态
+	•	SET_WALLPAPER：设置壁纸
+⸻
+2. 危险权限 (Dangerous Permissions)
+	•	特点：涉及用户隐私或设备安全，必须 运行时动态申请（Android 6.0+）。
+	•	按权限组分类（常见组）：
+	•	日历 (CALENDAR)
+	•	READ_CALENDAR、WRITE_CALENDAR
+	•	相机 (CAMERA)
+	•	CAMERA
+	•	联系人 (CONTACTS)
+	•	READ_CONTACTS、WRITE_CONTACTS、GET_ACCOUNTS
+	•	位置 (LOCATION)
+	•	ACCESS_FINE_LOCATION、ACCESS_COARSE_LOCATION
+	•	麦克风 (MICROPHONE)
+	•	RECORD_AUDIO
+	•	电话 (PHONE)
+	•	READ_PHONE_STATE、CALL_PHONE、READ_CALL_LOG、WRITE_CALL_LOG、ADD_VOICEMAIL、USE_SIP、PROCESS_OUTGOING_CALLS
+	•	传感器 (SENSORS)
+	•	BODY_SENSORS
+	•	短信 (SMS)
+	•	SEND_SMS、RECEIVE_SMS、READ_SMS、RECEIVE_WAP_PUSH、RECEIVE_MMS
+	•	存储 (STORAGE)
+	•	READ_EXTERNAL_STORAGE、WRITE_EXTERNAL_STORAGE
+⸻
+3. 签名权限 (Signature Permissions)
+	•	特点：只有当 请求权限的应用 和 声明权限的应用 使用相同的签名证书时，才能授予。
+	•	应用场景：系统应用间的私有接口调用。
+	•	示例：
+	•	INSTALL_PACKAGES（安装 APK）
+	•	DELETE_PACKAGES（卸载 APK）
+⸻
+4. 签名或系统权限 (SignatureOrSystem Permissions)
+	•	特点：Android 5.0 以前允许系统预装应用（放在 /system/app）或相同签名应用使用。
+	•	状态：Android 6.0 开始逐渐废弃，很多权限被收紧为 Signature-only。
+	•	示例（老系统才有效）：
+	•	WRITE_SETTINGS
+	•	CHANGE_CONFIGURATION
+⸻
+5. 特殊权限 (Special Permissions)
+这些不属于普通危险权限，需要通过 特殊 API 或系统设置界面 授权。
+	•	SYSTEM_ALERT_WINDOW（悬浮窗权限）
+	•	通过 Settings.canDrawOverlays() 检查
+	•	WRITE_SETTINGS（修改系统设置）
+	•	通过 Settings.System.canWrite() 检查
+	•	REQUEST_INSTALL_PACKAGES（允许安装未知来源的 APK）
+	•	Android 8.0 引入
+	•	MANAGE_EXTERNAL_STORAGE（管理所有文件）
+	•	Android 11 引入，替代传统的存储权限
+	•	USE_FULL_SCREEN_INTENT（高优先级通知）
+	•	Android 10 引入
+⸻
+6. 受限制权限 (Restricted Permissions, Android 10+)
+	•	特点：Google 逐步收紧一些权限的使用，需要 Google 审核/声明特殊用途 才能上架 Play。
+	•	示例：
+	•	READ_SMS、SEND_SMS（敏感通讯权限）
+	•	READ_CALL_LOG、WRITE_CALL_LOG
+	•	ACCESS_BACKGROUND_LOCATION（后台定位权限，Android 10+ 严格限制）
+⸻
+✅ 总结：Android 权限主要分为：
+	•	普通权限（自动授予）
+	•	危险权限（需要运行时授权）
+	•	签名/签名或系统权限（系统或签名一致才可用）
+	•	特殊权限（需要通过系统设置授权）
+	•	受限制权限（Google 审核，敏感程度高）
+## Android的平台权限定义
+  定义在AndroidManifest.xml中
+Android 的权限本质上就是字符串常量，统一定义在 frameworks/base/core/res/AndroidManifest.xml 里。
+这是系统框架的清单文件，其中包含了所有系统预定义权限，例如：
+```xml
+<permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+    android:protectionLevel="dangerous" />
+<permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+    android:protectionLevel="dangerous" />
+```
+当在Application中 AndroidManifest.xml 里写：
+```xml
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+```
+就使用了这个权限，但是必须动态申请。
+
+## Android的运行时权限控制方式：通过PM的CheckPermission
+
+## Android的运行是权限控制方式：映射为OS的特定属性
+
+## Android的Permission与UID/GID的mapping
 
 
