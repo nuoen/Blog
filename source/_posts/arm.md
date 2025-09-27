@@ -213,3 +213,93 @@ ldr Xd,[Xn,$offset]
 
 
 std:string内存结构
+
+### ARM PIC模式下的符号地址获取
+#### 汇编代码
+```
+.text:00001C28 loc_1C28                                ; CODE XREF: JNI_OnLoad+30↑j
+.text:00001C28                 SUB     R5, SP, #8
+.text:00001C2C                 MOV     SP, R5
+.text:00001C30                 LDR     R0, =(_GLOBAL_OFFSET_TABLE_ - 0x1C48)
+.text:00001C34                 LDR     R1, =(sub_16A4 - 0x5FBC)
+.text:00001C38                 MOV     R3, #0
+.text:00001C3C                 STR     R8, [R5]
+.text:00001C40                 ADD     R0, PC, R0      ; _GLOBAL_OFFSET_TABLE_
+.text:00001C44                 ADD     R2, R1, R0      ; sub_16A4
+.text:00001C48                 ADD     R0, R9, R0      ; unk_6290
+.text:00001C4C                 MOV     R1, #0
+.text:00001C50                 LDR     R7, [R0,#(off_62B4 - 0x6290)]
+.text:00001C54                 SUB     R0, R11, #-var_20
+.text:00001C58                 BLX     R7
+.text:00001C5C                 BL      sub_17F4
+.text:00001C60                 LDR     R0, [R4]
+.text:00001C64                 MOV     R6, #4
+.text:00001C68                 MOV     R1, R5
+.text:00001C6C                 ORR     R6, R6, #0x10000
+.text:00001C70                 MOV     R2, R6
+.text:00001C74                 LDR     R3, [R0,#0x18]
+.text:00001C78                 MOV     R0, R4
+.text:00001C7C                 BLX     R3
+.text:00001C80                 CMP     R0, #0
+.text:00001C84                 MOVNE   R6, #0xFFFFFFFF
+.text:00001C88                 MOV     R0, R6
+.text:00001C8C                 SUB     SP, R11, #0x18
+.text:00001C90                 POP     {R4-R9,R11,PC}
+```
+PIC截取片段：
+```
+LDR R0, =(_GLOBAL_OFFSET_TABLE_ - K)   ; 取“GOT 相对 PC 的偏移”这个常量
+ADD R0, PC, R0                         ; R0 ← 运行时的 GOT 基址
+LDR R1, =(sub_16A4 - C)                ; R1 ← 链接时放进字面池的“相对偏移”
+ADD R2, R1, R0                         ; R2 ← GOT基址 + 偏移 = sub_16A4 的真实地址
+```
+
+* 第一步：`LDR R0, =(_GLOBAL_OFFSET_TABLE_ - 0x1C48) + ADD R0, PC, R0`—— 这会把 `_GLOBAL_OFFSET_TABLE_ `的运行时基址（GOT base）计算到 R0。这是典型的加载 GOT 基址的 idiom。
+* 第二步：`LDR R1, =(sub_16A4 - 0x5FBC) `—— 这不是直接把`sub_16A4 - 0x5FBC`当作最终地址；而是把一个编译/链接阶段生成的常量（通常是“符号相对于某个参考基址的偏移”）加载到 R1。
+* 第三步：`ADD R2, R1, R0 `—— 把上面的偏移（R1）和运行时的 GOT/基址（R0）相加，得到 `sub_16A4` 的实际运行时地址（放到 R2）。
+
+#### 解释：
+**静态** 指的是目标相对于so的地址
+**动态** 指的是so链接到程序后，运行时的地址
+* **_GLOBAL_OFFSET_TABLE_** 静态的GOT地址
+* **0x1C48**  静态PC的值
+* **LDR R0, =(_GLOBAL_OFFSET_TABLE_ - 0x1C48)**  静态的GOT - 静态PC的值 => GOT相当于PC的偏移
+* **ADD R0, PC, R0** GOT相对于PC的偏移 + 运行时PC值 =>  动态的GOT地址
+* **0x5FBC** _GLOBAL_OFFSET_TABLE_  GOT表(全局偏移表)相对于so的地址
+* **LDR R1, =(sub_16A4 - 0x5FBC)** 计算静态符号距离静态GOT偏移
+* **ADD R2, R1, R0**  R1: 动态GOT地址， R0:sub_16A4 相对于GOT的偏移 
+
+这里的R2 就是sub_16A4运行时的地址
+
+#### 比喻：
+把 sub_16A4 - 0x5FBC 想成书架上的“书的编号相对于书柜左边缘的位置”，GOT_base/module base 就是“书柜的左边缘在房间的真实坐标”。要拿到书的房间内真实坐标，你要把“书相对书柜的编号（偏移）”加上“书柜在房间里的坐标（基址）”。IDA 把“书的编号写成 book - 0x5FBC”来表示它是个相对量。
+
+### PS
+```
+.text:00001C48                 ADD     R0, R9, R0      ; unk_6290
+.text:00001C50                 LDR     R7, [R0,#(off_62B4 - 0x6290)]
+```
+1C48这里，R0 = unk_6290相对于GOT的静态偏移 + GOT的动态地址
+1C50这里，R7 = R0 一定是unk_6290的动态地址 + 偏移off_62B4相对于unk_6290的静态偏移 => off_62B4的动态地址
+#### 名词：
+1) 什么是 “link-time 常量（相对某个基址的偏移）”
+	•	link-time 常量：由链接器在链接时计算并写入到代码/字面池/重定位记录中的一个数值。它经常不是“绝对地址”，而是一个表达式的结果，例如“符号相对某个锚点（基址）的偏移”。在 ELF 里，这由重定位条目（relocation）描述：运行时装载器会按“符号值 + 加数（addend）+（可选）PC/基址”的公式把它补全/应用到目标位置。 ￼
+	•	在 ARM 上，LDR Rd, =expr 这种伪指令常把 32 位常量放进字面池（literal pool），再用 PC 相对的 LDR 取出来。这个 expr 可以是“符号 - 锚点”这样的相对量，IDA 就会把它渲染成你看到的样子。 ￼
+
+直观理解：链接器先把“某函数相对于某基准的偏移”记到常量区；到运行时，再把“偏移 + （运行时算出来的）基址”相加，得到真实地址。
+
+⸻
+
+2) 什么是 GOT / _GLOBAL_OFFSET_TABLE_ 的“基址”
+	•	GOT（Global Offset Table，全局偏移表）是共享库/PIE 用来在运行时保存“需要绝对地址的全局数据/函数地址”的一个表。动态链接器会把它填好或按需填好（PLT/GOT-PLT）。.got/.got.plt 常配合 PLT 处理外部符号调用。 ￼
+	•	GOT 基址就是该表在当前模块被装载后的起始地址。PIC 代码会先用一小段 PC 相对序列把 GOT 基址算进某寄存器（你片段里是通过 LDR … =(_GLOBAL_OFFSET_TABLE_ - …) + ADD PC, … 这类序列得到的），然后再用“GOT 基址 + 偏移”去拿到真正的目标地址或到 GOT 中继续取绝对地址。 ￼
+	•	在 ARM AAPCS/EABI 模型下，某些平台/编译器会把 R9 指定为 SB（static base） 来当做“位置无关数据的静态基址”，本质也是“先拿到一个基址，再加偏移”。（不同平台对 R9 的角色有差异。） ￼
+
+⸻
+
+3) 为什么要用 “link-time 偏移 + GOT 基址” 来算地址
+	•	支持位置无关 / ASLR：共享库或 PIE 进程每次装载到的绝对地址可能不同，因此不能在指令里硬编码“绝对地址”。把“相对偏移”写进常量区/重定位里，运行时再与“当前装载得到的基址”相加，就能在任意基址下得到正确的目标地址。 ￼
+	•	ELF 重定位模型：ELF 里普遍采用“S + A (+ P)”一类的重定位计算（S=符号值，A=加数/偏移，P=当前指令位置等），把链接时给出的加数（偏移）与运行时可知的符号/基址组合得到最终值。这正是你看到 “sub_16A4 - 0x5FBC + 运行时基址” 的来源。 ￼
+	•	ARM 汇编生成习惯：编译器用 LDR Rd, =expr 伪指令+字面池存偏移，再通过 ADD 把它与 PC/GOT 基址相加，得到最终地址；IDA 会把字面池里的常量显示成 符号 - 某常量 的形式，容易让人误以为要“真的去减”，其实它只是被选作的锚点表达。 ￼
+
+⸻

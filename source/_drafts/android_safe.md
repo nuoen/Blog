@@ -1,3 +1,5 @@
+> 本笔记为安全体系与 Android 平台权限/签名机制速记。**最近一次校对：2025-09（基于 Android 15 / API 35 现状）**。文末与相关章节已补充近年重要变更：APK 签名 v2/v3/v4、分区存储、包可见性、运行时权限调整、前台服务限制、精确闹钟权限等。
+
 扎绳篇：
 非对称密码 公钥体系
 证书 
@@ -141,7 +143,7 @@ app_uid = user_id * 100000 + app_id
 	•	否则系统拒绝安装。
 
 ⸻
-## Chomd 和 chown命令介绍
+## chmod 和 chown 命令介绍
 文件R/W/X的系统内部采用3Bit表示，R为最高位比特，置位为0x04,W为中间比特，置位为0x02,X为最低位比特，置位为0x01
 shell中表示时，置位使用相应R/W/X表示，未置位使用-
 操作文件面向群体的操作权限时，使用Chomd，可以直接使用数字，也可以使用助记符
@@ -151,9 +153,9 @@ chown 命令用于改变文件的所有者和所属组(UID和GID)
 SHELL命令中通常采用Name方式修改，而不是ID方式
 一般格式： chown newUID : newGID FileName
 
-/**
+```shell
 chown system:system nohup.out
-**/
+```
 ## UID/GID的衔接
 Linux一切皆是文件
 文件基于UID/GID来划分它的面向群体，对它的面向群体定义不同的操作权限
@@ -163,22 +165,22 @@ Linux一切皆是文件
 进程的UID/GID除了被授予可操作文件的范畴外，非文件范畴的需要进行权限控制的操作（如重启系统等特权操作）继续通过进程的UID/GID身份来进行控制和授权
 比如，对于Reboot这个API,其入口处可以check calling的Process的UID,如果不是Root，则Reject
 
-# 进程的RealUID 和 EffecitveUID
+ # 进程的 Real UID 和 Effective UID
 ## 身份的标识：Real UID
 * 进程的UID只是泛称，其实有很多种不同的UID
 * 进程的Real UID是进程的身份的标识，用来说明 Who am I
 * 仅仅说明Who am I,但是没有“实权”是不行的
 * Linux中，进程能做什么事情不是由Real UID决定的
 * Real UID仅仅是身份，有身份没有权利是无用的
-## 权利的标识：Effiective UID
+## 权利的标识：Effective UID
 * 有身份无权利是不行的
-* Effiective UID是进程的权利的标识，标识了该进程的“权利”
-* Linxu中的进程的授权（即，当前进程具有的操作权限）是靠Effecive UID来识别的
+* Effective UID是进程的权利的标识，标识了该进程的“权利”
+* Linux中的进程的授权（即，当前进程具有的操作权限）是靠Effective UID来识别的
 * 有权利就能做一切，Linux中具有“特权”Effective UID的进程能为所欲为
-* 之前课时说明的，文件，资源以及特权API操作时对进程是否有权限的识别的UID,即是指Effecitve UID
+* 之前课时说明的，文件，资源以及特权API操作时对进程是否有权限的识别的UID,即是指Effective UID
 ## 身份和权利的关系
-* 一般情况下，身份和权利是一致的，即 Real UID = Effecitve UID
-* 所以，默认PS CMD 输出的UID指的是Effecitve UID,而没有输出Real UID
+* 一般情况下，身份和权利是一致的，即 Real UID = Effective UID
+* 所以，默认PS CMD 输出的UID指的是Effective UID,而没有输出Real UID
 ```shell
 ps aux
 USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
@@ -187,18 +189,25 @@ root           2  0.0  0.0      0     0 ?        S    Jun28   0:00 [kthreadd]
 root           3  0.0  0.0      0     0 ?        I<   Jun28   0:00 [rcu_gp]
 root           4  0.0  0.0      0     0 ?        I<   Jun28   0:00 [rcu_par_gp]
 ```
-* 我们也可以显式的显示完整的Effecitve UID 和 Real UID
+* 我们也可以显式的显示完整的Effective UID 和 Real UID
 ```shell
+# 查看所有进程的真实/有效 UID、GID
+ps -eo pid,ruid,euid,rgid,egid,user,comm
 
+# 仅看某个 PID（示例：1234）
+ps -o pid,ruid,euid,rgid,egid,cmd -p 1234
+
+# 从 /proc 读取（同时可见 Capability）
+cat /proc/1234/status | egrep 'Uid:|Gid:|Cap(Inh|Prm|Eff)'
 ```
 ## ROOT用户的特权
-* 我们所指的root用户，均是Effecitve UID = root的进程，尽管一般情况下，Real UID = Effecitve UID
-* Effecitve UID = root的进程具有“皇权”，他不受任何限制，可以为所欲为
+* 我们所指的root用户，均是Effective UID = root的进程，尽管一般情况下，Real UID = Effective UID
+* Effective UID = root的进程具有“皇权”，他不受任何限制，可以为所欲为
 * 它可以为自己正身：如果自己的身份（Real UID）不是root，它可以将自己的身份名正言顺的改为root(调用SetXUID),从而使身份和权利均是root
-* 它也可以自降为庶民：出家皈依，将自己的Real UID 和 Effecitve UID 都设置（降低，也是调用SetXUID）为庶民（非特权普通的Real UID,Effective UID），从而失去特权.
+* 它也可以自降为庶民：出家皈依，将自己的Real UID 和 Effective UID 都设置（降低，也是调用SetXUID）为庶民（非特权普通的Real UID,Effective UID），从而失去特权.
 ## UID的世袭
 * 在linux世界里，为了安全考虑，UID的世袭遵循：身份世袭而权利不世袭的准则
-* 子进程的Real UID = Effiective UID = 父进程的Real UID
+* 子进程的Real UID = Effective UID = 父进程的Real UID
 * 这使得临时夺权且尚位正身（普通Real UID 而特权Effective UID）的进程的子嗣不能继承其特权而仅能继承其的正身 （Real UID）
 
 # 文件setUID标识
@@ -233,7 +242,18 @@ chmod 0775 xxx.file //取消setUID
 * 两个例子，passwd（未正身），Android的su（正身）
 ## 有RealGID,EffecitveGID,setGID吗
 * 存在，待看
-  
+
+## 文件 Capability（setcap/getcap）
+* 除了 setUID 之外，现代 Linux/Android 更推荐使用 **文件 Capability** 赋权，避免一刀切的 root 特权。
+* 常用命令：
+```shell
+# 赋予二进制绑定低端口能力（示例）
+sudo setcap 'cap_net_bind_service=+ep' /path/to/bin
+# 查看文件能力
+getcap /path/to/bin
+```
+* 在 Android 上，系统分区的二进制能力通常由构建系统打包时附加；第三方 App 无法随意为自身可执行文件设置 capability。
+
 如此管理权限颗粒度太粗，不够精细，所以引入了Capability机制
 
 # Linux的Capability机制
@@ -295,19 +315,14 @@ P'(inheritable) = P(inheritable)
 ```shell
 cat /proc/[pid]/status | grep Cap
 ```
-## Capability与UID的兼容
+# Capability与UID的兼容
 * 新技术必须向下（前）兼容，要保证旧的实体（应用）工作正常
 * 旧的应用：Capability - dumb进程
   Permitted Capability Sets = Effective Capability Sets = Inheritable Capability Sets = 0x000000000000000,我不知道，我怎么设置？
 * 旧的可执行文件：Capability - dumb文件:
   Root-setUID可执行文件，系统转变为Capability的方式为：File Effective Bit = True;File 's Permitted和Inheritable Capability Sets = 0xFFFFFFFFFFFFFFFF
-* 旧的Root EUID的进程：
-  File Effective Bit = True; File 's Permitted和Inheritable Capability Sets = 0xFFFFFFFFFFFFFFFF
-  考虑一个平民运行Root-setUID可执行文件的场景：
-  P'(Permitted) = P(inheritable) | cap_bset
-  P'(effective) = P'(Permitted)
-  按照平民不识Capability也不会去修改（其祖先也未修改），那么，P(inheritable) = 0x0000000000000000 , cap_best = 0xFFFFFFFFFFFFFFFF,所以 P'(Permitted) = P'(permitted) = 0xFFFFFFFFFFFFFFFF
-  依然具有皇族的特权
+* 旧的 Root EUID 的进程：对使用 v1（JAR）签名时代的 setUID 兼容，**File Effective Bit = true** 时仍会将文件的 Permitted 能力集赋予进程（受 BoundSet 限制）。
+* 注意：公式中的常量应为 **PR_CAPBSET**（capability bound set），不是 PR_CAPBEST。
 # 高级特性
 ## 被ROOT了怎么办
 * 手机被ROOT了怎么办
@@ -329,38 +344,68 @@ SEAndroid (Security-Enhanced Android) 将原本运用在Linux上的SELinux技术
   除了移植SELinux以外，还做了很多针对Android的安全提高，比如把Binder IPC、Socket、Properites访问控制加入到了SEAndroid的控制中。
 * SEAndroid的核心理念
   即使恶意应用篡得了ROOT权限，恶意应用仍然被优先的控制着仍然不能为所欲为。
-## JB MR2的一个漏洞弥补
-* 在JB MR2(android 4.3)之前,APK内部可以通过Java的Runtime执行一个具有Root-SetUID的可执行文件而提升Effecitve UID来完成一些特权操作，典型的Root包中的su就是这个原理。
-* JB MR2之后，APK内部通过Runtime执行具有Root-SetUID的可执行文件不再提升Effecitve UID而是维持平民身份。
-Inside inside dalvik_system_Zygote.cpp
-```cpp
-//new added inside forkAndSpecializeCommon
-//APK 进程启动前清理边界集 → 其所有 capabilities 被禁用。
-//此时即使执行 SetUID-root 文件：
-//用户身份可能提升为 root（Effective UID 改变），
-//​但边界集为空 → capabilities 被剥夺 → 无法执行特权操作。
-for(int i=0;prctl(PR_CAPBEST_READ,i,0,0,0,0)>=0;i++){
-  err = prctl(PR_CAPBEST_DROP,i,0,0,0,0);
-  if(err<0){
-    if(errno==EINVAL){
-      ALOGW("PR_CAPBEST_DROP %d failed: %s"
-        "Please make sure your kernel is compiled with"
-        "file capabilities support enabled.",i,strerror(errno));
-    }else{
-      ALOGE("PR_CAPBEST_DROP %d failed: %s",i,strerror(errno));
-      dvmAbort();
-    }
-  }
+
+## Jelly Bean MR2（Android 4.3）的补丁（setUID 提权收紧）
+* 在 Android 4.3 之前，APK 进程能通过 `Runtime.exec()` 执行 **root-setUID** 二进制并提升 EUID。
+* 4.3 起，Zygote 在 fork 应用进程时**清空 Capability Bound Set**，使后续执行 setUID 文件时即使 EUID 改变，也**无实际 capability**可用。
+* 关键逻辑位于 Zygote 分支（Dalvik/ART 不同版本位置不同），等价于：
+```c
+// 伪代码：清空 PR_CAPBSET（capability bound set）
+for (int i = 0; prctl(PR_CAPBSET_READ, i, 0, 0, 0) >= 0; i++) {
+    prctl(PR_CAPBSET_DROP, i, 0, 0, 0);
 }
 ```
-* 这样，每个APK的进程主动把自己的Capability BoundSet从原先的0xFFFFFFFFFFFFFFFF变成：0x000000000000000
-* APK 运行Root-setUID的进程Capability为：
-  P'(permitted) = P(inheritable) | cap_bset
-  P'(effective) = P'(Permitted)
-  P'(inheritable) = 0x0000000000000000
-  cap_bset 低32bit全为0
-* 后果
-  新进程的P'(effective) Capability Sets为Empty,所以，CAP_SETUID当然也没有，那么系统期于Root-setUID的可执行文件来提升EUID到ROOT当然不允许了。所以，新的进程的RUID = EUID =APK 进程的RUID
+* 结论：普通 APK 进程执行 root-setUID 二进制不再具备有效的 capability，无法借此获取特权。
+
+### JB MR2 细节（扩展版）
+**动机**  
+早期（4.2 及之前）APK 进程可通过 `Runtime.exec()`/`fork+exec` 执行带 **setUID-root** 位的二进制，从而把子进程的 **EUID 提升为 0**，再借助传统 root 权限做特权操作。为阻断这一途径，Android 4.3 在 Zygote 派生应用进程后，对 **Capability Bound Set（BSET）** 进行清空，使随后即便执行 setUID 文件，进程也**拿不到任何有效的 capability**。
+
+**内核前提**  
+* 依赖 Linux 的 **Capability Bounding Set** 机制（`prctl(PR_CAPBSET_DROP, cap)`）。  
+* 当某 capability 被从 BSET 中 drop 后，后续**不可再添加**到该进程的 Permitted 集（除非通过 exec 进入 `init`/更高权限环境，但普通 APK 不具备）。
+
+**Zygote 侧变化（伪代码）**  
+```c
+// 在 fork 普通应用进程后（进入 app uid/gid 环境前后），遍历所有 capability：
+for (int cap = 0; prctl(PR_CAPBSET_READ, cap, 0, 0, 0) >= 0; ++cap) {
+    prctl(PR_CAPBSET_DROP, cap, 0, 0, 0);  // 将 BSET 清空
+}
+// 随后再 setresgid / setresuid 至应用 uid/gid，清空附属组等。
+// 注意：JB MR2 当时并**未**依赖 PR_SET_NO_NEW_PRIVS（较新内核才有），主要手段就是清空 BSET。
+```
+
+**能力传播公式回顾**  
+对一次 `execve(file)`，新的进程 capability 计算（简化）为：
+```
+P' = (P_inh & F_inh) | (F_perm & BSET)
+E' = F_eff ? P' : 0
+I' = P_inh   // 仅 Inheritable 可直接继承
+```
+* 其中 `F_*` 来自**目标可执行文件**的 capability，`P_*` 为**当前进程**；`BSET` 为 **Capability Bound Set**。
+* 当 **BSET = 0** 时，无论 `F_perm` 多大、`F_eff` 是否置位，`P'` 都只能来源于 `P_inh & F_inh`。而普通 APK 的 `P_inh` 默认为 0，故 `P' = 0`，`E' = 0`。
+
+**对 setUID-root 的具体影响**  
+* setUID 仍会令子进程的**EUID 变为 0**（身份层面），但由于 `P'=0`、`E'=0`，进程**没有任何有效 capability**，无法执行需要 capability 的特权操作（例如 `CAP_SYS_ADMIN`、`CAP_SYS_MODULE` 等）。
+* 这等价于：**“看起来像 root，实则无权”**，从根本上堵住了通过 setUID 提权的常见路径。
+
+**前/后对比（示例）**  
+* *JB MR2 之前（BSET=全 1）*：
+  - `F_eff=1`、`F_perm` 含若干能力 → `P'` 至少获得 `F_perm & BSET`，再赋给 `E'`，子进程具备相应特权。
+* *JB MR2 之后（BSET=0）*：
+  - 即便 `F_eff=1`，也因 `F_perm & 0 = 0` → `P'=0`、`E'=0`。
+
+**如何验证**  
+1. 在 APK 内部 `exec` 一个 setUID-root 的小程序：
+   ```shell
+   id; cat /proc/$$/status | egrep 'Uid:|Gid:|Cap(Inh|Prm|Eff)'
+   ```
+   可见 `Uid:` 的 `EUID` 为 0，但 `CapEff:` 为全 0。  
+2. 改为在 `adb shell`（root 环境）直接运行同一程序（不经 Zygote app 沙盒）对比其 `CapEff`，能观察到差异。
+
+**补充说明**  
+* 这一设计与后续版本中的 **SELinux（Enforcing）**、**权限拆分/前台服务限制** 等共同组成多层防护。  
+* 后续 Android/内核版本也引入了 `no_new_privs` 等手段，但 **JB MR2 的关键变化点就是清空 BSET**。
 
 捕鱼篇
 # 签名和权限
@@ -436,6 +481,7 @@ for(int i=0;prctl(PR_CAPBEST_READ,i,0,0,0,0)>=0;i++){
   Process间Share UID的目的是共享资源等
   Android中两个APK Share相同的UID必须其签名所用的Private Key一样（为什么）
   如果shareUID相同，A可以访问B中的data/data下的资源
+  android11 shareUID不再支持，因为它破坏了应用沙盒的安全模型，使得应用间的隔离变得复杂。
 ## Android的签名作用：身份ID和升级的匹配
 * Android中的自签名只是代表了身份，但不代表身份是否可信任
 * Android的应用的Identifier是Package Name:
@@ -450,11 +496,61 @@ for(int i=0;prctl(PR_CAPBEST_READ,i,0,0,0,0)>=0;i++){
 * META INF的组成
 *   •	Android 7.0 (Nougat) 开始支持 v2 签名（APK Signature Scheme v2），之后又有 v3/v4。
 	•	使用 v2/v3/v4 签名时，可以不再包含 CERT.RSA、CERT.SF、MANIFEST.MF 文件，因为签名数据存储在 APK 尾部的 Signing Block 里。
+**APK Signature Scheme 现状（2025）**
+* **v1（JAR 签名）**：只保护单个条目；Android 7.0+ 仍支持但已不推荐，易被 zipalign 等修改破坏。
+* **v2**：签名数据位于 APK **Signing Block**；显著加速安装校验，允许不再包含 `CERT.RSA/ CERT.SF/ MANIFEST.MF`。
+* **v3**：在 v2 基础上支持**密钥轮换（Proof-of-rotation）**；升级时可更换签名密钥并建立信任链。
+* **v4**：为**增量安装/分发**设计，搭配 v2/v3 使用，主要由安装器消费。
+* 校验命令：
+```shell
+apksigner verify -v --print-certs your.apk
+```
+* Play 商店上架要求：应使用 v2+（新应用一般要求 v3），仅 v1 可能被拒。
 * 签名流程
   PrivateKey(hash(CERT.SF)) => CERT.RSA
 ## 回顾和总结
 
-# Android中的权限
+ # Android中的权限
+## 近年权限与隐私重大变化（Android 10~15 摘要）
+1) **分区存储 Scoped Storage**（Android 10/11）
+* 外部存储访问被沙箱化；`READ/WRITE_EXTERNAL_STORAGE` 逐步被弱化。
+* Android 11 起提供 **MANAGE_EXTERNAL_STORAGE**（极度敏感，仅少量场景允许）。
+* 媒体访问细分为：`READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` / `READ_MEDIA_AUDIO`（Android 13+），以及 **选择性访问** `READ_MEDIA_VISUAL_USER_SELECTED`（Android 14/15）。
+
+2) **包可见性（Package Visibility）**（Android 11）
+* 默认**无法枚举**系统上安装的其他包。
+* 需要在 `AndroidManifest.xml` 中声明：
+```xml
+<queries>
+    <package android:name="com.example.target" />
+    <intent>
+        <action android:name="android.intent.action.VIEW" />
+        <data android:scheme="https" />
+    </intent>
+</queries>
+```
+
+3) **运行时权限拆分与新增**
+* Android 12：蓝牙权限改为运行时 `BLUETOOTH_CONNECT/SCAN/ADVERTISE`，并引入 **NEARBY_DEVICES** 场景限制。
+* Android 12：位置支持**近似/精确**；用户可仅授予近似位置。
+* Android 13：**通知权限** `POST_NOTIFICATIONS` 改为运行时授权。
+* Android 14/15：健康/传感器、后台权限进一步收紧（例如 `BODY_SENSORS_BACKGROUND` 需额外审查）。
+
+4) **前台服务（FGS）与后台限制**
+* Android 12 起要求声明 **前台服务类型**（`type="location|mediaPlayback|connectedDevice|dataSync|camera|microphone|health"` 等）。
+* Android 14/15 对**后台启动 FGS**、超时与并发数量更严格；建议改用 **WorkManager + 明确的 FGS 类型**。
+
+5) **精确闹钟**
+* Android 13 引入 `USE_EXACT_ALARM`；Android 14/15 对非闹钟类 App 更**严格限制**，需合规理由与设置跳转。
+
+6) **照片选择器（Photo Picker）**（Android 13+）
+* 无需存储权限即可让用户选择媒体；优先使用系统 Photo Picker 替代自建文件选择。
+
+7) **PendingIntent 可变性**
+* Android 12 要求显式设置 `FLAG_IMMUTABLE` 或 `FLAG_MUTABLE`，默认不再安全。
+
+8) **签名权限与 privapp 权限**
+* 大量历史 `signatureOrSystem` 权限被收紧为 `signature`；OEM 侧须通过 `privapp-permissions` 白名单并配套签名。
 ## Android的权限作用：细粒度特权管理
 * 权限与操作关联
   android不支持隐式申请权限，即使是系统应用，也需要显式申请权限
@@ -550,10 +646,90 @@ Android 的权限本质上就是字符串常量，统一定义在 frameworks/bas
 ```
 就使用了这个权限，但是必须动态申请。
 
+> 提示：从 Android 13 起，媒体读取权限按类型细分；从 Android 11 起，**`WRITE_EXTERNAL_STORAGE` 基本被废弃**，请改用 `MediaStore` + 具体媒体权限或 Photo Picker。
+
 ## Android的运行时权限控制方式：通过PM的CheckPermission
+* Android独有的Service（底层平台不具有）
+* 所以需要在Android本身Framework中控制
+* 主流的Service一般都是基于Binder IPC或者其他IPC提供服务
+* 所以在最低层控制（Service所在的service可执行文件 run中）以避免逃逸控制
+  绕开Utility Function直接invoke Remote Service
+  所以要在service run中进行控制
+* 例子 DayDream
+```java
+void startDockOrHome(){
+  awakenDreams();
+  Intent dock = createDockIntent();
+  if(dock != null){
+    try{
+      mContext.startActivityAsUser(dock,UserHandle.CURRENT);
+      return;
+    }catch(ActivityNotFoundException e){
+    }
+
+    private static void awakenDreams(){
+      IDreamManager dreamManager = getDreamManager();
+      if(dreamManager != null){
+        try{
+          dreamManager.awaken();
+        }catch(RemoteException e){
+          //fine,stay asleep then
+        }
+      }    
+      }
+  }
+}
+
+static IDreamManager getDreamManager(){
+  return IDreamManager.Stub.asInterface(ServiceManager.checkService(DreamService.DREAM_SERVICE));
+}
+
+@Override //Binder call
+public void awaken(){
+  checkPermission(android.Manifest.permission.WRITE_DREAM_STATE);
+  final long ident = Binder.clearCallingIdentity();
+  try{}
+}
+
+private void checkPermission(String permission){
+  if(mContext.checkCallingOrSelfPermission(permission) != PackageManager.PERMISSION_GRANTED){
+    throw new SecurityException("Access denied to process: " + Binder.getCallingPid()+", must have permission " + permission);
+  }
+}
+```
+
+> 生产代码建议：在 **Binder 端（服务实现）**做二次校验（`checkCallingPermission()` / `enforceCallingPermission()`），避免调用方绕过客户端封装直接发起 IPC。
 
 ## Android的运行是权限控制方式：映射为OS的特定属性
+* 非Android特有的Service（底层平台已经提供，如File访问，TCPIP数据首发等）
+* 多个入口访问：Android API , Java API ,NDK C API ,Shell ,etc
+* 底层控制准则，会聚口在底层，所以在底层（OS层面）统一控制，这样可以避免逃逸控制
+* 所以复用OS的一些安全控制特性，比如GID
+* 所以需要把Android空间的Permission Mapping到OS的GID
+* 例子：访问SDCard
+  sdcard目录下的文件权限如下所示：
+```shell
+# 外部存储挂载示例（不同设备存在差异）
+marlin:/ $ ls -l /storage
+total 8
+drwx--x--x 3 root sdcard_rw 4096 2025-09-01 21:59 emulated
+drwxr-xr-x 2 root root        60 1974-12-07 14:35 self
+# 进程通过所属 GID（如 sdcard_rw / media_rw）与 FUSE/SDCardFS/FS-verity 等层配合受控访问
+```
 
 ## Android的Permission与UID/GID的mapping
 
+# Android 专题补充（2025）
+## AID 与多用户 UID 计算
+* `appId` 从 10000 起分配；多用户下 `uid = userId * 100000 + appId`。
+* 典型系统 AID：`AID_SYSTEM=1000`、`AID_RADIO=1001`、`AID_BLUETOOTH=1002`、`AID_GRAPHICS=1003` 等（详见 `android_filesystem_config.h`）。
 
+## SELinux（SEAndroid）要点
+* 强制访问控制（MAC）默认 **Enforcing**；检查：`getenforce`。
+* App 进程运行在诸如 `u:object_r:app_data_file:s0:cXX,cYY`（文件）与 `u:r:untrusted_app:s0:cXX,cYY`（进程域）之下；越权访问由策略阻断。
+* 调试常用：`adb shell dmesg | grep avc:`、`adb logcat | grep denied` 定位策略拒绝。
+
+## 调试与自检清单
+* 查看进程身份与能力：`ps -eo pid,ruid,euid,rgid,egid,user,comm`; `cat /proc/$PID/status`。
+* 查看签名方案与证书：`apksigner verify -v --print-certs your.apk`。
+* 遵循现代权限：优先 Photo Picker / MediaStore；声明 `queries`；细化 FGS 类型；声明 PendingIntent 可变性；最小权限原则。

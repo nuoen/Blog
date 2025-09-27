@@ -11,7 +11,8 @@ android 中多进程的通信都会依赖Binder IPC机制
 对于用户空间，不同进程之间彼此是不能共享的，而内核空间却是可共享的。
 Client进程向Server进程通信，恰恰是利用进程间可共享的内核内存空间来完成底层通信工作的，Client端与Server端进程往往采用ioctl等方法跟内核空间的驱动进行交互。
 1.2 binder原理
-![alt text](binder_principle.png)
+![alt text](./binbinder_principle.png)
+![alt text](./binder/binder_principle.png)
 可以看出无论是注册服务和获取服务的过程都需要ServiceManager，
 需要注意的是此处的Service Manager是指Native层的ServiceManager（C++），并非指framework层的ServiceManager(Java)。
 ServiceManager是整个Binder通信机制的大管家，是Android进程间通信机制Binder的守护进程，要掌握Binder机制，

@@ -1,5 +1,7 @@
 ida调试 https://bbs.kanxue.com/thread-259633.htm
 
+ida 调试，调试arm运行android_service32
+调试arm64 运行android_service64
 1. ida 的 android_service 文件push 到手机中
 2. 开启 android_service
 3. ida导入将要调试的so文件
