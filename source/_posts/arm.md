@@ -274,7 +274,7 @@ ADD R2, R1, R0                         ; R2 ← GOT基址 + 偏移 = sub_16A4 �
 #### 比喻：
 把 sub_16A4 - 0x5FBC 想成书架上的“书的编号相对于书柜左边缘的位置”，GOT_base/module base 就是“书柜的左边缘在房间的真实坐标”。要拿到书的房间内真实坐标，你要把“书相对书柜的编号（偏移）”加上“书柜在房间里的坐标（基址）”。IDA 把“书的编号写成 book - 0x5FBC”来表示它是个相对量。
 
-### PS
+#### PS
 ```
 .text:00001C48                 ADD     R0, R9, R0      ; unk_6290
 .text:00001C50                 LDR     R7, [R0,#(off_62B4 - 0x6290)]
@@ -303,3 +303,91 @@ ADD R2, R1, R0                         ; R2 ← GOT基址 + 偏移 = sub_16A4 �
 	•	ARM 汇编生成习惯：编译器用 LDR Rd, =expr 伪指令+字面池存偏移，再通过 ADD 把它与 PC/GOT 基址相加，得到最终地址；IDA 会把字面池里的常量显示成 符号 - 某常量 的形式，容易让人误以为要“真的去减”，其实它只是被选作的锚点表达。 ￼
 
 ⸻
+
+
+### Thumb 切到 ARM ,tunk/跳板
+```
+text:00086B08 ; =============== S U B R O U T I N E =======================================
+.text:00086B08
+.text:00086B08 ; Attributes: thunk
+.text:00086B08
+.text:00086B08 sub_86B08                               ; CODE XREF: sub_16238+A↑p
+.text:00086B08                                         ; sub_19F4C+A↑p ...
+.text:00086B08                 BX      PC
+.text:00086B08 ; ---------------------------------------------------------------------------
+.text:00086B0A                 ALIGN 4
+.text:00086B0C                 CODE32
+.text:00086B0C
+.text:00086B0C loc_86B0C                               ; CODE XREF: sub_86B08↑j
+.text:00086B0C                 LDR     R12, =(sub_11244 - 0x86B18)
+.text:00086B10                 ADD     PC, R12, PC     ; sub_11244
+.text:00086B10 ; ---------------------------------------------------------------------------
+.text:00086B14 off_86B14       DCD sub_11244 - 0x86B18 ; DATA XREF: sub_86B08:loc_86B0C↑r
+.text:00086B14 ; End of function sub_86B08
+.text:00086B14
+.text:00086B18                 CODE16
+.text:00086B18 ; [00000010 BYTES: COLLAPSED FUNCTION j___umodsi3. PRESS CTRL-NUMPAD+ TO EXPAND]
+.text:00086B28
+.text:00086B28 ; =============== S U B R O U T I N E =======================================
+
+// attributes: thunk
+int __fastcall sub_86B08(int a1)
+{
+  return sub_11244(a1);
+}
+```
+跳板解释：
+```
+.text:00086B08 sub_86B08          ; 被很多地方 BL 调用的“存根”
+.text:00086B08    BX      PC      ; 在 Thumb 态执行。BX PC 会“切换指令集”，跳到当前 PC 指向处但把 T 位翻转
+.text:00086B0A    ALIGN 4         ; 接下来按 4 字节对齐（ARM 指令对齐）
+.text:00086B0C    CODE32          ; 这里开始用 ARM 指令集
+.text:00086B0C loc_86B0C:
+.text:00086B0C    LDR     R12, =(sub_11244 - 0x86B18)  ; 从字面池取“到 sub_11244 的相对偏移”
+.text:00086B10    ADD     PC, R12, PC                  ; PC ← PC + R12  => 跳去 sub_11244
+.text:00086B14 off_86B14 DCD sub_11244 - 0x86B18       ; 字面池，存的就是上面要加载的相对偏移
+.text:00086B18    CODE16
+; 这里 IDA 注释：j___umodsi3（被折叠的另一段 Thumb 代码）
+```
+#### 为什么需要这样绕一下
+	•	指令集切换（ARM ↔ Thumb）：调用点（比如 BL sub_86B08）可能在 Thumb 态，但真正的目标函数 sub_11244 在 ARM 态（或距离/可达性问题）。直接跨态跳转需要符合 ABI 规则，linker 会插入这种 veneer 来保证安全切换。
+	•	位置无关 / 远距跳转：即使同一态，有时因为距离超出分支立即数范围或出于 PIC/ASLR 的需要，linker 也会生成用字面池+ADD PC 的 veneer 来“拼”出实际目标地址。
+	•	复用存根：同一个 veneer 可能被多个调用点引用（你也看到上面注释里：sub_16238+A、sub_19F4C+A 都引用了它）。
+
+
+#### Veneer vs Thunk 对比
+# Veneer vs Thunk 对比
+# Veneer vs Thunk 对照表（完整版）
+
+> 速记：**Veneer = 链接器的“跳板”**（修补指令集/距离/重定位），**Thunk = 编译器的“语义适配器”**（修补 this/调用约定/语言特性）。
+
+| 维度 | **Veneer（贴面/跳板）** | **Thunk（桩/适配桩）** |
+|---|---|---|
+| **定义** | 由 **链接器**自动生成的小段中转代码，用于保证能“正确跳到目标地址”。 | 由 **编译器**自动生成的小段中转代码，用于“正确完成一次调用的语义”。 |
+| **主要动机** | ① ARM↔Thumb **指令集切换**（interworking）<br>② **分支距离**超出 `B/BL` 可达范围（long branch）<br>③ **位置无关/PIC/ASLR** 下需要 **PC/GOT 相对**拼地址 | ① C++ **虚函数/多继承**导致的 **this 指针调整**（adjustor thunk）<br>② **调用约定/ABI** 差异（如 `cdecl`↔`stdcall`）<br>③ **闭包/lambda** 捕获桥接、延迟求值等语言特性 |
+| **生成阶段/工具** | **Linker 阶段**（ld/gold/lld 等） | **Compiler 阶段**（clang/gcc/msvc 等） |
+| **典型指令形态（ARM32）** | `LDR r12, =target - anchor` + `ADD pc, r12, pc`；<br>`BX <reg>` / `BLX <reg>` 完成 **切态**；有时引入 **literal pool**。 | `ADD reg, #imm` 调整 `this` / 参数，随后 `B/BL` 或 `JMP` 到真实实现；通常不切换指令集，仅做 **寄存器/栈** 轻微改动。 |
+| **是否修改参数** | 一般 **不改参数**，只构造正确的控制流目标（可能切态）。 | 常 **调整参数/this**，或改变调用约定以匹配真实实现。 |
+| **是否有栈帧** | 通常 **无**（极短，无 prologue/epilogue）。 | 可能有或无，但经常有 **轻量调整**（不一定建完整栈帧）。 |
+| **位置/命名特征** | 常出现在 **代码段边界/对齐处**；可能被多个调用点共用；ID A 里常标注 “**Attributes: thunk**”（但其语义更接近 veneer）。 | 靠近类/方法定义或虚表附近；可能被标注为 thunk，并带有带修饰名的符号（C++ 名字整形）。 |
+| **与符号/重定位** | 强依赖 **PC 相对**、**GOT/PLT**、**literal pool**；链接时/装载时完成地址拼接。 | 与 **语言语义** 与 **对象模型/ABI** 紧密关联，较少依赖 GOT。 |
+| **平台分布** | ARM/Thumb、AArch64（长跳 veneer）、RISC-V（远距分支）、PowerPC 等常见。 | 几乎所有支持 OOP/多 ABI 的平台（x86/x64/ARM/ObjC/Swift…）。 |
+| **如何识别（逆向）** | ① 极短、**只做取地址+跳转/切态**；② 包含 `BX/BLX` 或 `ADD pc, reg, pc`；③ 紧邻 **字面池**（`DCD target - anchor`）。 | ① 有 **this/参数** 调整痕迹；② 紧跟一个真正实现；③ 符号/交叉引用指向某个类成员实现。 |
+| **调试/验证要点** | 单步看 **PC 变化** 与 **T 位（Thumb bit）**；观察 literal pool 值是否等于 `target - anchor`；确认跳转后是否落到目标函数入口。 | 单步看 **寄存器/栈** 的调整；确认最终 `jmp/call` 到真实实现；检查虚表项是否先落到该 thunk。 |
+
+---
+
+## 示例 A：Veneer（ARM32 Interworking & 远距跳转）
+
+```asm
+; Thumb 态入口（IDA 可能显示为 CODE16）
+sub_86B08:
+    BX      PC              ; 切到 ARM 态（interworking）
+    ALIGN   4
+    CODE32
+loc_86B0C:
+    LDR     r12, =(sub_11244 - 0x86B18)  ; 从字面池取“目标相对偏移”
+    ADD     pc, r12, pc                  ; PC ← PC + r12 ⇒ 跳到 sub_11244
+off_86B14 DCD sub_11244 - 0x86B18        ; 字面池 / 重定位项
+
+
