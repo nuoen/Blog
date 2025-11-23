@@ -1,6 +1,9 @@
-# AOSP+kernel源码和编译
+# AOSP+kernel源码和编译（akita-kernel）
 
-## 源码和清单
+
+
+## 源码结果和清单文件
+### 仓库结构
 ```
 AOSP 根
 ├─ .repo/                         # repo 工具本地存放
@@ -20,9 +23,9 @@ AOSP 根
 platform manifest 和 kernel manifest
 https://android.googlesource.com/platform/manifest
 https://android.googlesource.com/kernel/manifest/
-
-## 内核分层
-```
+### 内核分层
+GKI（Generic Kernel Image）引入后，内核架构简化：
+```text
 Upstream Linux LTS (e.g. v6.1.y)
           │
           ▼
@@ -36,7 +39,8 @@ Android Common Kernel  →  kernel/common（Google 维护的通用内核基线�
           ▼
 Device Kernel（具体机型仓库/补丁/设备树/配置）
 ```
-## Android 12「以上」vs「以下」：系统与内核交付形态
+
+#### Android 12「以上」vs「以下」：系统与内核交付形态
 | 维度 | Android 12 以下 | Android 12 及以上（GKI 引入后） |
 |------|----------------|--------------------------------|
 | **系统架构** | Treble 初步拆分：`system` 与 `vendor` 分区，接口解耦还不完全稳定 | Treble 成熟化 + GKI 引入，Google 与厂商职责边界更清晰 |
@@ -48,7 +52,7 @@ Device Kernel（具体机型仓库/补丁/设备树/配置）
 | **兼容性保障** | 系统更新需强依赖厂商内核同步更新，成本高 | Google 维护 GKI 内核 ABI 稳定性；厂商只需更新 vendor 模块即可 |
 | **更新模式** | Kernel Patch + Device Kernel OTA | GKI 内核由 Google 维护安全补丁；厂商仅推 vendor 模块更新 |
 
-### Android 12 以下（厂商定制内核）
+#### Android 12 以下（厂商定制内核）
 ```text
                 ┌───────────────────┐
                 │   Upstream Linux  │
@@ -78,8 +82,8 @@ Device Kernel（具体机型仓库/补丁/设备树/配置）
  └────────────────────────────────────────────────────┘
 ```
 
-### Android 12 及以上（GKI 模式）
-```
+#### Android 12 及以上（GKI 模式）
+```text
                 ┌───────────────────┐
                 │   Upstream Linux  │
                 └─────────┬─────────┘
@@ -108,9 +112,143 @@ Device Kernel（具体机型仓库/补丁/设备树/配置）
 │ (存放可加载驱动模块)           │   │ (设备树 Blob Overlay)  │
 └─────────────────────────────┘   └───────────────────────┘
 ```
+## 代码下载
+gsi :未释放
+
+## 编译
+### 新增自定义配置
+//private/devices/google/akita:akita_gki.fragment
+
+### 编译命令
+```sh
+tools/bazel run \
+  --config=akita \
+  --config=use_source_tree_aosp \
+  //private/devices/google/akita:zuma_akita_dist \
+  --gki_build_config_fragment=//private/devices/google/akita:akita_gki.fragment \
+  --defconfig_fragment=//private/devices/google/akita:akita_gki.fragment \
+  -s --debug_print_scripts --debug_make_verbosity=V
+```
+
+### 内核刷入
+```sh
+adb reboot bootloader
+fastboot -w
+fastboot oem pkvm disable
+fastboot flash boot boot.img
+fastboot flash dtbo dtbo.img
+fastboot flash vendor_kernel_boot vendor_kernel_boot.img
+#进入fastbootd模式
+fastboot reboot fastboot
+fastboot getvar is-userspace
+fastboot flash system_dlkm system_dlkm.img
+fastboot flash vendor_dlkm vendor_dlkm.img
+#再启动到bootloader模式
+#ota中解出的vbmeta.img等文件
+fastboot flash --disable-verity --disable-verification vbmeta ./vbmeta.img
+fastboot flash --disable-verity --disable-verification vbmeta_system vbmeta_system.img
+fastboot flash --disable-verity --disable-verification vbmeta_vendor vbmeta_vendor.img
+#重启，验证替换成功
+```
+
+### 编译内核模块
+命令
+```sh
+tools/bazel run \
+  --config=akita \
+  --config=use_source_tree_aosp \
+  --config=no_download_gki_fips140 \
+  //modules/hello:hello_dist
+```
+hello，目录下的BUILD.bazel
+```
+load("@//build/kernel/kleaf:kernel.bzl", "kernel_module","kernel_modules_install")
+load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+filegroup(
+    name = "lkm_sources",
+    srcs = glob(
+        [
+        "**/*.c", 
+        "**/*.h",
+        "Kbuild"],
+        exclude = [
+            "BUILD.bazel*",
+            "**/*.bzl",
+            ".gid/**",
+        ]),
+)
+kernel_module(
+    name = "hello",
+    srcs = [":lkm_sources"],
+    outs = ["hello.ko",],
+    kernel_build = "//private/devices/google/akita:kernel",
+ )
+
+copy_to_dist_dir(
+    name = "hello_dist",
+    data = [":hello"],
+    dist_dir = "out/hello",
+    flat = True,
+    log = "info",
+)
+kernel_modules_install(
+    name = "hello_install",
+    kernel_build = "//private/devices/google/akita:kernel",
+    kernel_modules = [
+        ":hello",
+    ],
+)
+```
+
+## GKI编译产物
+### 各个img含义
+以pixel8a Tensor SoC 为例
+#### init_boot.img 
+从 Android 13 开始，Pixel 全系列把 ramdisk 从 boot.img 拆到 init_boot.img。
+
+#### boot.img （gki通用内核）
+boot.img = kernel Image（没有 ramdisk）
+•	Google 提供统一 GKI kernel
+•	厂商不许修改
+•	GKI 通过接口调用 vendor 侧模块
+
+#### vendor_boot.img (厂商 ramdisk)
+厂商专用 ramdisk，包括：
+•	设备独占驱动加载脚本
+•	Tensor 芯片早期驱动初始化
+•	vendor 服务
+•	部分厂商二进制依赖的 init 文件
+
+#### vendor_kernel_boot.img (Tensor SoC 特有)
+这是 Android GKI 架构独有的新分区
+专门用于：
+•	vendor kernel modules 的 early 部分
+•	厂商补充内核功能
+•	GKI 通用内核的 vendor 接口层
+这是绝不能随便替换或动的分区,否则会造成
+❌ kernel panic
+❌ 直接进入 fastboot
+❌ 甚至无法 fastboot（hard brick 级别）
+#### ramdisk 是什么？
+
+ramdisk = 内核启动时挂载的根文件系统的一部分
+包含：
+•	/init
+•	early init scripts
+•	sepolicy
+•	ueventd.rc
+•	fstab
+•	Magisk 注入系统
+
+在 Tensor SoC（Pixel 6/7/8）中：
+ramdisk 在 init_boot.img
+vendor ramdisk 在 vendor_boot.img
 
 ## 阅读
-
 ### gsi :Android Studio导入源码相关
 1、编译
 source lunch
@@ -225,49 +363,21 @@ https://juejin.cn/post/7139773823116640263
 
 
 
-### gki：vscode 配置文件
-1. 右下角配置按钮
-2. 写入以下配置：
-```json
-        {
-            "name":"gki_android_13",
-            "includePath": [
-                "android13-5.15-167/common/include",
-                "android13-5.15-167/common/include/uapi",
-                "android13-5.15-167/common/kernel",
-                "android13-5.15-167/common/arch/arm64/include",
-                "android13-5.15-167/common/arch/arm64/include/uapi",
-                "android13-5.15-167/common/arch/arm/include",
-                "android13-5.15-167/common/arch/arm/include/uapi",
-                "android13-5.15-167/bazel-android13-5.15-167/common/include",
-                "android13-5.15-167/bazel-android13-5.15-167/common/arch/arm64/include",
-                "android13-5.15-167/bazel-android13-5.15-167/common/arch/arm64/include/uapi",
-                "android13-5.15-167/bazel-android13-5.15-167/common/usr/include",
-                "android13-5.15-167/bazel-android13-5.15-167/out__common_kernel_aarch64/android13-5.15/common/include",
-                "android13-5.15-167/bazel-android13-5.15-167/out__common_kernel_aarch64/android13-5.15/common/include/generated"
-            ],
-            "defines": [
-                "__KERNEL__",
-                "__ANDROID__COMMON_KERNEL__",
-                "MODULE"
-            ],
-            "compilerArgs": [
-                "-nostdinc",
-                "-include",
-                "android13-5.15-167/bazel-android13-5.15-167/out__common_kernel_aarch64/android13-5.15/common/include/generated/autoconf.h",
-                "-Wno-declaration-after-statement"
-            ],
-            "compilerPath":"/usr/bin/gcc",
-            "cStandard": "c17"
-        }
+### gki：kazel编译生成配置文件，适用于vscode源码阅读
+命令
+```sh
+tools/bazel run \
+  --config=akita \
+  --config=use_source_tree_aosp \
+  //private/devices/google/akita:akita_compile_commands -- \
+  $(pwd)/compile_commands.json
 ```
-
-## 编译
-
-### gsi
-
-### gki
-编译产物解析
+vscode中配置settings.json中
+```json
+    "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}"
+  ]
+```
 
 ## 调试
 ### lldb 调试servicemanager
@@ -292,8 +402,8 @@ lldb
 ```
 启动
 (lldb) process launch --stdin /dev/stdin --working-dir /data/local/tmp
-## gdb 调试
-当然可以，以下是一个适用于你的环境的 GDB 远程调试 Android 64 位程序（如 pwn_uaf1）的完整流程文档，支持传递参数、查看符号和断点调试。
+### gdb 调试
+GDB 远程调试 Android 64 位程序（如 pwn_uaf1）支持传递参数、查看符号和断点调试。
 
 ⸻
 
@@ -409,7 +519,5 @@ sleep 2
 gdb-multiarch pwn_uaf1 -ex "target remote :1234"
 
 
+## 问题
 
-⸻
-
-是否还需要我附带一个 .gdbinit 模板来自动设置符号、连接和断点？
