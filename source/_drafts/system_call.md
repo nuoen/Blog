@@ -1,4 +1,7 @@
-系统调用解析
+
+# 系统调用
+
+## 链路分析
 
 trace:
 ```
@@ -38,6 +41,9 @@ trace:
 [#7] 0xffff800080011d4c → el0t_64_sync()
 
 ```
+**定义系统调用SYSCALL_DEFINEx(xxx,xxx)**
+
+
 1. 用户空间调用 syscall，触发 svc 0。
 2. CPU 进入内核模式，跳转到 el0t_64_sync。
 3. 异常处理函数 el0t_64_sync_handler 被调用。
@@ -423,3 +429,13 @@ invoke_syscall 函数主要负责调用系统调用处理函数，具体步骤�
 	return syscall_fn(regs);
 }
 这里便开始执行真正的系统调用函数。
+
+
+## 系统调用表
+内核syms中,获取系统调用表的方法为
+```sh
+akita:/data/local/tmp # cat /proc/kallsyms | grep sys_call_table                                      
+ffffffe4fe4a0cb0 D sys_call_table
+ffffffe4fe4a6a88 D compat_sys_call_table
+```
+1. 系统调用表是可读的属性

@@ -12,7 +12,8 @@ aosp 编译
 
 ### 准备工作
 1. https://github.com/facebookexperimental/ExtendedAndroidTools
-2. busybox 
+编译出bpftools
+2. busybox 下载
 ```shell
 adb push busybox /data/local/tmp/
 adb shell
@@ -52,14 +53,111 @@ cat /sys/kernel/tracing/tracing_on
 echo 1 > /sys/kernel/tracing/tracing_on
 ```
 
+6. uprobe 验证
+bpftrace -e 'uprobe:/system/lib64/libdl.so:android_dlopen_ext { printf("dlopen_ext called by pid %d filename: %s\n", pid, str(arg0)); }'
+
+7. dump vmlinux.h
+bpftool btf dump file ./out/bazel/output_user_root/bad79f3893a0a6ab5b67c91f8a510de3/execroot/__main__/bazel-out/k8-fastbuild/bin/private/devices/google/akita/kernel_kbuild_mixed_tree/vmlinux format c > ./vmlinux.h
+
 两种不同的生态 BCC 和 libbpf
 ## BCC (BPF Compiler Collection)
 * 一个基于 Python/C++ 的工具集，内部自带了一份 简化版的 libbpf API（所以会有 bcc/libbpf.h 这样的头文件）。
 * 它屏蔽了很多底层细节，方便用 Python + embedded C 写 eBPF 程序。
 * 如果你是用 BCC 工具（如 trace.py、funclatency.py），那你会看到 bcc/libbpf.h。
 
+bcc开发环境（mac vscod + docker+ colima）
+新建环境：
+1. 安装docker
+Dockerfile
+```Dockerfile
+# syntax=docker/dockerfile:1
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        bash \
+        build-essential \
+        ca-certificates \
+        clang \
+        curl \
+        git \
+        libelf-dev \
+        llvm \
+        pkg-config \
+        python3 \
+        python3-pip \
+        python3-venv \
+        python3-setuptools \
+        python3-wheel \
+        zlib1g-dev \
+        bpfcc-tools \
+        python3-bpfcc && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PYTHONUNBUFFERED=1 \
+    WORKSPACE=/workspace
+
+WORKDIR ${WORKSPACE}
+
+COPY requirements-dev.txt /tmp/requirements-dev.txt
+RUN python3 -m pip install --upgrade pip && \
+    python3 -m pip install --no-cache-dir -r /tmp/requirements-dev.txt && \
+    rm /tmp/requirements-dev.txt
+
+CMD ["/bin/bash"]
+```
+2. 解压kernel-headers
+3. vscode 安装devcontainers 插件
+设置配置文件
+.devcontainer/devcontainer.json
+```json
+{
+  "name": "ebpf-bcc-dev",
+  "build": {
+    "dockerfile": "../docker/Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+
+  "runArgs": [
+    "-e", "KERNEL_HEADERS_ROOT=/workspace/kernel-headers",
+    "-e", "TARGET_ARCH=${localEnv:TARGET_ARCH:-arm64}"
+  ],
+
+  "remoteEnv": {
+    "KERNEL_HEADERS_ROOT": "/workspace/kernel-headers",
+    "TARGET_ARCH": "${localEnv:TARGET_ARCH:-arm64}"
+  },
 
 
+  "userEnvProbe": "none",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-vscode.cpptools"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "python.terminal.activateEnvironment": false,
+        "files.associations": {
+          "ptrace.h": "c",
+          "slab.h": "c",
+          "gfp.h": "c"
+        }
+      }
+    }
+  }
+}
+```
+4.使用colima来开启docker服务，公司不让用docker desktop
 
 ## libbpf (官方库)
 * 来自 Linux 内核 tools/lib/bpf/，现在是 官方推荐 的用户态库。
@@ -69,6 +167,12 @@ echo 1 > /sys/kernel/tracing/tracing_on
 
 
 ## 关键词
+
+### ftrace
+什么是ftrace
+https://source.android.google.cn/docs/core/tests/debug/ftrace?hl=zh-cn
+
+
 ### 探针
 ```shell
 sudo bpftrace -l "kprobe:*" | wc -l

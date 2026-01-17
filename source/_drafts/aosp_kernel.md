@@ -1,7 +1,5 @@
 # AOSP+kernel源码和编译（akita-kernel）
 
-
-
 ## 源码结果和清单文件
 ### 仓库结构
 ```
@@ -113,9 +111,29 @@ Device Kernel（具体机型仓库/补丁/设备树/配置）
 └─────────────────────────────┘   └───────────────────────┘
 ```
 ## 代码下载
-gsi :未释放
+### 全量ota包：
+https://developers.google.com/android/ota?#akita
+source/_drafts/akita-ota-bp3a.250905.014-ad844b0a.zip
+### gsi :已释放
+Build ID
+Tag	Version	Supported devices	Security patch level
+BP3A.250905.014	android-16.0.0_r3	Android16		2025-09-05
 
+repo init --partial-clone --no-use-superproject -b android-16.0.0_r3 -u https://android.googlesource.com/platform/manifest
+repo sync -c -j8
+### gki :
+https://source.android.com/docs/setup/build/building-pixel-kernels#pixel-gki-kernel-branches
+https://android.googlesource.com/kernel/manifest/+/refs/heads/android-gs-akita-6.1-android16 
+
+repo init -u https://android.googlesource.com/kernel/manifest -b android-gs-akita-6.1-android16-beta
+repo sync
+
+### 驱动
+https://developers.google.com/android/drivers?hl=zh-cn
 ## 编译
+gsi
+
+gki：
 ### 新增自定义配置
 //private/devices/google/akita:akita_gki.fragment
 
@@ -129,9 +147,23 @@ tools/bazel run \
   --defconfig_fragment=//private/devices/google/akita:akita_gki.fragment \
   -s --debug_print_scripts --debug_make_verbosity=V
 ```
-
+### 解包验证编译成功
+比如要验证内核是否开启了CONFIG_FTRACE_SYSCALLS，可以使用如下命令：
+```sh
+./aosp/scripts/extract-ikconfig ./out/akita/dist/Image | grep -E "CONFIG_FTRACE_SYSCALLS"
+```
 ### 内核刷入
 ```sh
+scp 'work-ubuntu:/home/mi/1t/akita-kernel/out/akita/dist/*.img' ./
+//刷入厂包，使ab分区的bootloader版本保持一致，厂包或者全量ota包的版本要>=当前手机版本,否则会造成硬件熔断变砖
+fastboot reboot recovery
+//recovery下选择abd模式
+# 2️⃣ 出现安卓机器人 + No command
+# 👉 按住电源键
+# 👉 再按一次音量加键
+# 进入 Recovery 菜单
+adb sideload /Users/nuoen/Downloads/akita-ota-bp3a.250905.014-ad844b0a.zip
+
 adb reboot bootloader
 fastboot -w
 fastboot oem pkvm disable
@@ -362,6 +394,53 @@ android.iml文件中包括了太多的源码目录和jar包，如果此时直接
 https://juejin.cn/post/7139773823116640263
 
 
+### gsi :vscode clangd 阅读源码
+编译时：
+```sh
+cd /path/to/aosp-root
+
+# 1. 进环境（你平时 build 一定也这么干）
+source build/envsetup.sh
+lunch aosp_arm64-userdebug
+
+# 2. 打开 Soong 的 compdb 生成功能
+export SOONG_GEN_COMPDB=1
+export SOONG_GEN_COMPDB_DEBUG=1
+
+# 可选：让 soong 直接在当前目录（源码根）放一个软链接
+export SOONG_LINK_COMPDB_TO="$PWD"
+
+# 3. 触发一个构建
+m 
+# 跑完检查
+# 1）如果 SOONG_LINK_COMPDB_TO 被支持，源码根目录会直接有：
+ls compile_commands.json
+
+# 2）通用默认路径（Android 10+、AOSP 主线基本都是这儿）：
+ls out/soong/development/ide/compdb/compile_commands.json
+
+# vscode中 新增 .vscode/settings.json
+{
+  "clangd.arguments": [
+    "--compile-commands-dir=.",
+    "--background-index",
+    "--all-scopes-completion"
+  ]
+}
+
+# java 需要拓展： 	Language Support for Java™ by Red Hat
+#并在settings.json 里新增,按需添加
+{
+  "java.project.sourcePaths": [
+    "frameworks/base/core/java",
+    "frameworks/base/services/core/java",
+    "frameworks/base/packages",
+    "libcore",
+    "system"
+  ]
+}
+
+```
 
 ### gki：kazel编译生成配置文件，适用于vscode源码阅读
 命令
